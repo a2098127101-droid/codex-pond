@@ -245,6 +245,10 @@ public sealed class PondRenderer : FrameworkElement
     {
         var effectActive = ActiveEvent?.IsActive(DateTimeOffset.Now) == true;
         var season = Environment.Season;
+        if (effectActive && ActiveEvent is { } activeEvent)
+        {
+            DrawEventParticles(dc, activeEvent.Definition.VisualEffect);
+        }
         var count = effectActive ? 8 : season switch
         {
             PondSeason.Spring => 2,
@@ -293,6 +297,34 @@ public sealed class PondRenderer : FrameworkElement
         }
     }
 
+    private void DrawEventParticles(DrawingContext dc, string effect)
+    {
+        for (var i = 0; i < 5; i++)
+        {
+            var x = (36 + i * 91 + _animationSeconds * (i % 2 == 0 ? 4 : -3) + 480) % 480;
+            var y = (45 + i * 43 + Math.Sin(_animationSeconds + i) * 5 + 295) % 295;
+            switch (effect)
+            {
+                case "dragonflies":
+                    DrawPixel(dc, x, y, 5, 1, "#C5E9D3");
+                    DrawPixel(dc, x + 2, y - 2, 2, 5, "#A7D6C5");
+                    break;
+                case "dew":
+                    DrawPixel(dc, x, y, 2, 4, "#C8EEE3");
+                    DrawPixel(dc, x + 1, y, 1, 2, "#EEF4D5");
+                    break;
+                case "reed-wind":
+                    DrawPixel(dc, x, y, 7, 1, "#D9C28A");
+                    DrawPixel(dc, x + 3, y + 2, 5, 1, "#AFBC83");
+                    break;
+                case "ice-glint":
+                    DrawPixel(dc, x + 1, y - 2, 2, 7, "#D7EFF0");
+                    DrawPixel(dc, x - 1, y, 6, 2, "#D7EFF0");
+                    break;
+            }
+        }
+    }
+
     private void DrawAccessories(DrawingContext dc)
     {
         var isFusion = Theme == PondTheme.FusionCE;
@@ -304,6 +336,15 @@ public sealed class PondRenderer : FrameworkElement
             DrawPixel(dc, x + 4, y, 13, 7, "#D8AE62");
             DrawPixel(dc, x + 6, y - 1, 10, 2, "#E7C77C");
         }
+        else if (EquippedHatId == "moonlit-hat")
+        {
+            var x = isFusion ? 103 : 111;
+            var y = isFusion ? 131 : 117;
+            DrawPixel(dc, x + 2, y + 7, 20, 3, "#76869A");
+            DrawPixel(dc, x + 7, y + 2, 12, 5, "#AFC7D0");
+            DrawPixel(dc, x + 9, y, 8, 3, "#DDE7D5");
+            DrawPixel(dc, x + 11, y + 2, 2, 2, "#F5E6A8");
+        }
         if (LeftDecorId == "grass-block")
         {
             DrawPixel(dc, 18, 255, 20, 9, "#896343");
@@ -311,7 +352,15 @@ public sealed class PondRenderer : FrameworkElement
             DrawPixel(dc, 20, 249, 7, 3, "#8AAF5A");
             DrawPixel(dc, 29, 249, 7, 3, "#749D50");
         }
-        if (RightDecorId is "spring-bloom" or "summer-shell" or "autumn-leaf" or "winter-star" or "firefly-jar")
+        if (RightDecorId == "four-season-mobile")
+        {
+            DrawPixel(dc, 469, 157, 1, 16, "#A67942");
+            DrawPixel(dc, 462, 160, 2, 2, "#E6A1A6");
+            DrawPixel(dc, 468, 164, 2, 2, "#E4D48D");
+            DrawPixel(dc, 474, 160, 2, 2, "#D47C4B");
+            DrawPixel(dc, 468, 171, 2, 2, "#C7E2E3");
+        }
+        else if (RightDecorId is "spring-bloom" or "summer-shell" or "autumn-leaf" or "winter-star" or "firefly-jar")
         {
             var color = RightDecorId switch
             {

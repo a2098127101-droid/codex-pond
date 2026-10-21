@@ -175,6 +175,8 @@ public sealed class CodexAppServerAdapter : ICodexAppServerAdapter, IAgentTaskLa
     private readonly IReadOnlyList<string>? _argumentOverride;
     private Process? _process;
     private Task? _readerTask;
+    private string? _activeThreadId;
+    private string? _activeTurnId;
     private long _nextId;
     private int _disposed;
     private int _lostRaised;
@@ -212,18 +214,24 @@ public sealed class CodexAppServerAdapter : ICodexAppServerAdapter, IAgentTaskLa
         if (!string.IsNullOrWhiteSpace(resumeThreadId))
         {
             var resumed = await SendRequestAsync("thread/resume", new { threadId = resumeThreadId }).ConfigureAwait(false);
-            return ReadString(resumed, "thread", "id") ?? resumeThreadId;
+            _activeThreadId = ReadString(resumed, "thread", "id") ?? resumeThreadId;
+            _activeTurnId = null;
+            return _activeThreadId;
         }
 
         var result = await SendRequestAsync("thread/start", new { cwd }).ConfigureAwait(false);
         var threadId = ReadString(result, "thread", "id");
         if (string.IsNullOrWhiteSpace(threadId))
             throw new InvalidOperationException("Codex App Server 没有返回 thread id。");
+        _activeThreadId = threadId;
+        _activeTurnId = null;
         return threadId;
     }
 
     public async Task<string> StartTurnAsync(string threadId, string prompt, string cwd)
     {
+        _activeThreadId = threadId;
+        _activeTurnId = null;
         var result = await SendRequestAsync("turn/start", new
         {
             threadId,
@@ -234,6 +242,7 @@ public sealed class CodexAppServerAdapter : ICodexAppServerAdapter, IAgentTaskLa
         var status = ReadString(result, "turn", "status");
         if (string.IsNullOrWhiteSpace(turnId) || !string.Equals(status, "inProgress", StringComparison.Ordinal))
             throw new InvalidOperationException("Codex App Server 的 turn/start 回包缺少有效 turn ID 或未处于 inProgress 状态。");
+        _activeTurnId = turnId;
         return turnId;
     }
 
@@ -319,12 +328,12 @@ public sealed class CodexAppServerAdapter : ICodexAppServerAdapter, IAgentTaskLa
         foreach (var argument in _argumentOverride ?? ["app-server", "--stdio"])
             start.ArgumentList.Add(argument);
 
-        _process = new Process { StartInfo = start, EnableRaisingEvents = true };
-        _process.Exited += (_, _) => RaiseConnectionLost("Codex App Server 已退出。");
-        if (!_process.Start())
+        var process = new Process { StartInfo = start, EnableRaisingEvents = true };
+        _process = process;
+        process.Exited += (_, _) => RaiseConnectionLost(process, "Codex App Server 已退出。");
+        if (!process.Start())
             throw new InvalidOperationException("无法启动 Codex App Server。");
 
-        var process = _process;
         _ = DrainStandardErrorAsync(process);
         _readerTask = Task.Run(() => ReadLoopAsync(process));
         try
@@ -423,6 +432,7 @@ public sealed class CodexAppServerAdapter : ICodexAppServerAdapter, IAgentTaskLa
             while (!process.HasExited)
             {
                 var line = await process.StandardOutput.ReadLineAsync().ConfigureAwait(false);
+                if (!ReferenceEquals(process, _process)) break;
                 if (line is null) break;
                 if (string.IsNullOrWhiteSpace(line)) continue;
                 using var document = JsonDocument.Parse(line);
@@ -442,21 +452,24 @@ public sealed class CodexAppServerAdapter : ICodexAppServerAdapter, IAgentTaskLa
                             request.Title, ProviderPayload: request));
                     }
                     else
-                        HandleNotification(method, parameters);
+                        HandleNotification(process, method, parameters);
                 }
             }
         }
         catch (Exception ex) when (ex is IOException or JsonException or InvalidOperationException or ObjectDisposedException)
         {
-            RaiseConnectionLost(ex.Message);
+            RaiseConnectionLost(process, ex.Message);
         }
         finally
         {
-            foreach (var pending in _pending.Values)
-                pending.TrySetException(new IOException("Codex App Server 连接已关闭。"));
-            _pending.Clear();
-            if (Volatile.Read(ref _disposed) == 0)
-                RaiseConnectionLost("Codex App Server 连接已关闭。");
+            if (ReferenceEquals(process, _process))
+            {
+                foreach (var pending in _pending.Values)
+                    pending.TrySetException(new IOException("Codex App Server 连接已关闭。"));
+                _pending.Clear();
+                if (Volatile.Read(ref _disposed) == 0)
+                    RaiseConnectionLost(process, "Codex App Server 连接已关闭。");
+            }
         }
     }
 
@@ -476,7 +489,7 @@ public sealed class CodexAppServerAdapter : ICodexAppServerAdapter, IAgentTaskLa
             completion.TrySetResult(default);
     }
 
-    private void HandleNotification(string method, JsonElement parameters)
+    private void HandleNotification(Process sourceProcess, string method, JsonElement parameters)
     {
         if (parameters.ValueKind != JsonValueKind.Object)
         {
@@ -491,7 +504,7 @@ public sealed class CodexAppServerAdapter : ICodexAppServerAdapter, IAgentTaskLa
         if ((method is "turn/started" or "turn/completed" or "item/started" or "item/completed" or "item/agentMessage/delta") &&
             (string.IsNullOrWhiteSpace(threadId) || string.IsNullOrWhiteSpace(turnId)))
         {
-            RaiseConnectionLost($"App Server 的 {method} 事件缺少 threadId 或 turnId，已停止处理未校验事件。");
+            RaiseConnectionLost(sourceProcess, $"App Server 的 {method} 事件缺少 threadId 或 turnId，已停止处理未校验事件。");
             return;
         }
         var text = method == "item/agentMessage/delta" ? ReadString(parameters, "delta") : null;
@@ -501,14 +514,21 @@ public sealed class CodexAppServerAdapter : ICodexAppServerAdapter, IAgentTaskLa
             status = ReadString(turn, "status");
             if (string.IsNullOrWhiteSpace(status))
             {
-                RaiseConnectionLost("App Server 的 turn/completed 事件缺少 turn.status，已停止处理未校验事件。");
+                RaiseConnectionLost(sourceProcess, "App Server 的 turn/completed 事件缺少 turn.status，已停止处理未校验事件。");
                 return;
             }
             text = string.Join(Environment.NewLine, ReadFinalMessages(turn));
         }
         EventReceived?.Invoke(new CodexServerEvent(method, threadId, turnId, text, status));
         if (TryMapAgentEvent(method, threadId, turnId, text, status, out var agentEvent))
+        {
+            if (agentEvent.Kind == AgentEventKind.Started)
+            {
+                if (string.Equals(agentEvent.SessionId, _activeThreadId, StringComparison.Ordinal))
+                    _activeTurnId = agentEvent.TurnId;
+            }
             AgentEventReceived?.Invoke(agentEvent);
+        }
     }
 
     private bool TryMapAgentEvent(string method, string? sessionId, string? turnId, string? text, string? status, out AgentEvent agentEvent)
@@ -568,13 +588,15 @@ public sealed class CodexAppServerAdapter : ICodexAppServerAdapter, IAgentTaskLa
         catch (ObjectDisposedException) { }
     }
 
-    private void RaiseConnectionLost(string message)
+    private void RaiseConnectionLost(Process sourceProcess, string message)
     {
+        if (!ReferenceEquals(sourceProcess, _process)) return;
         if (Volatile.Read(ref _disposed) != 0) return;
         if (Interlocked.Exchange(ref _lostRaised, 1) == 0)
         {
             ConnectionLost?.Invoke(message);
-            AgentEventReceived?.Invoke(new AgentEvent(AgentEventKind.Disconnected, ProviderId, Text: message));
+            AgentEventReceived?.Invoke(new AgentEvent(AgentEventKind.Disconnected, ProviderId,
+                _activeThreadId, _activeTurnId, message, "disconnected"));
         }
     }
 

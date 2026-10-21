@@ -28,6 +28,8 @@
 
   <ItemGroup>
     <Compile Remove="tests\**\*.cs" />
+    <Compile Remove="AgentContracts.cs;PondData.cs;CodexAppServerClient.cs;ProcessAgentAdapters.cs;ClaudePermissionMcpServer.cs;CyberBuddhaSeal.cs;macos\**\*.cs;**\obj\**\*.cs;**\bin\**\*.cs" />
+    <ProjectReference Include="shared\CodexPond.Core\CodexPond.Core.csproj" />
   </ItemGroup>
 
 </Project>

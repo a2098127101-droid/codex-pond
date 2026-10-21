@@ -7,6 +7,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodexPond", "CodexPond.cspr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodexPond.Smoke", "tests\CodexPond.Smoke\CodexPond.Smoke.csproj", "{32C1584C-383D-480F-B507-2AF9EF8B5A4B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodexPond.Core", "shared\CodexPond.Core\CodexPond.Core.csproj", "{6B6C4A52-BF9A-4A83-9203-22F5B3B0A4EE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodexPond.Mac", "macos\CodexPond.Mac\CodexPond.Mac.csproj", "{712DD671-FDBF-4B5E-B59E-09F6CC23E64B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -41,6 +45,14 @@ Global
 		{32C1584C-383D-480F-B507-2AF9EF8B5A4B}.Release|x64.Build.0 = Release|Any CPU
 		{32C1584C-383D-480F-B507-2AF9EF8B5A4B}.Release|x86.ActiveCfg = Release|Any CPU
 		{32C1584C-383D-480F-B507-2AF9EF8B5A4B}.Release|x86.Build.0 = Release|Any CPU
+		{6B6C4A52-BF9A-4A83-9203-22F5B3B0A4EE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6B6C4A52-BF9A-4A83-9203-22F5B3B0A4EE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6B6C4A52-BF9A-4A83-9203-22F5B3B0A4EE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6B6C4A52-BF9A-4A83-9203-22F5B3B0A4EE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{712DD671-FDBF-4B5E-B59E-09F6CC23E64B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{712DD671-FDBF-4B5E-B59E-09F6CC23E64B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{712DD671-FDBF-4B5E-B59E-09F6CC23E64B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{712DD671-FDBF-4B5E-B59E-09F6CC23E64B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

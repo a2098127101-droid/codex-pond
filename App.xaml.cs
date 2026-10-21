@@ -32,17 +32,41 @@ public partial class App : Application
             return;
         }
 
+        if (CyberBuddhaSeal.IsStampRequest(e.Args))
+        {
+            try
+            {
+                new CyberBuddhaStampWindow().ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"无法读取当前构建指纹：{ex.Message}\n\n印记编号：{CyberBuddhaSeal.MarkId}", "赛博大佛 · 构建印记", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            Shutdown();
+            return;
+        }
+
         _steamLaunched = e.Args.Any(argument => string.Equals(argument, "--steam", StringComparison.OrdinalIgnoreCase)) ||
             !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("SteamAppId"));
         _settingsStore = new PondSettingsStore();
         _fishBook = new FishBookStore();
         _settings = _settingsStore.Load();
+        if (_settingsStore.LastLoadResult.Status == PondSettingsLoadStatus.RecoveredCorrupt)
+        {
+            MessageBox.Show(
+                $"设置文件无法解析。原文件已保留为备份：\n{_settingsStore.LastLoadResult.BackupPath}\n\n应用将使用默认设置继续运行；你可以在设置中重新选择外观、工作目录和提供方。",
+                "设置已恢复", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        else if (_settingsStore.LastLoadResult.Status == PondSettingsLoadStatus.Unreadable)
+        {
+            MessageBox.Show(
+                $"设置文件暂时无法读取，应用将使用临时默认设置运行，并暂停设置写入以保护原文件。\n\n{_settingsStore.LastLoadResult.Error}",
+                "设置只读保护", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
         Platform = new SteamPlatformService();
         Platform.Initialize();
         Platform.SyncLocalSave(_settings, _settingsStore, _fishBook);
-        var startupFishRead = _fishBook.ReadResult();
-        if (startupFishRead.CanAppend)
-            Platform.OnFishCaught(startupFishRead.Records.Count, startupFishRead.Records.Select(record => record.FishId).Distinct(StringComparer.Ordinal).Count());
+        FishProgressReporter.Report(Platform, _fishBook);
         _steamCallbackTimer.Interval = TimeSpan.FromMilliseconds(100);
         _steamCallbackTimer.Tick += (_, _) => Platform?.PumpCallbacks();
         _steamCallbackTimer.Start();
@@ -54,7 +78,7 @@ public partial class App : Application
                 Platform?.SyncLocalSave(_settings, _settingsStore, _fishBook);
         };
 
-        var main = new MainWindow();
+        var main = new MainWindow(_settings, _settingsStore, _fishBook);
         MainWindow = main;
         var startIndependent = _steamLaunched || _settings.LastMode == PondMode.IndependentFishing;
         if (!startIndependent)

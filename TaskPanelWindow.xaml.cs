@@ -105,13 +105,22 @@ public partial class TaskPanelWindow : Window
 
     public void SetStatus(string status) => StatusText.Text = status;
 
+    public void SetProviderStatus(string status)
+    {
+        ProviderStatusText.Text = status;
+        ProviderStatusText.ToolTip = status;
+    }
+
     public void SetProviderSelection(string providerId)
     {
         _suppressProviderChanged = true;
         var selectedId = AgentProviderCatalog.Available.Any(provider => provider.Id == providerId) ? providerId : AgentProviderIds.Codex;
         ProviderComboBox.SelectedValue = selectedId;
         _providerLabel = AgentProviderCatalog.Label(selectedId);
-        ProviderComboBox.ToolTip = AgentProviderCatalog.Available.First(provider => provider.Id == selectedId).Guidance;
+        var selected = AgentProviderCatalog.Available.First(provider => provider.Id == selectedId);
+        ProviderComboBox.ToolTip = selected.Guidance;
+        PromptLabelText.Text = $"给 {_providerLabel} 留句话";
+        SetProviderStatus(selected.Readiness);
         _suppressProviderChanged = false;
     }
 
@@ -393,7 +402,12 @@ public partial class TaskPanelWindow : Window
         if (_suppressProviderChanged || ProviderComboBox.SelectedValue is not string providerId) return;
         _providerLabel = AgentProviderCatalog.Label(providerId);
         var selected = AgentProviderCatalog.Available.FirstOrDefault(provider => provider.Id == providerId);
-        if (selected is not null) ProviderComboBox.ToolTip = selected.Guidance;
+        if (selected is not null)
+        {
+            ProviderComboBox.ToolTip = selected.Guidance;
+            PromptLabelText.Text = $"给 {_providerLabel} 留句话";
+            SetProviderStatus(selected.Readiness);
+        }
         ProviderSelected?.Invoke(providerId);
     }
 
@@ -403,7 +417,7 @@ public partial class TaskPanelWindow : Window
     {
         using var dialog = new Forms.FolderBrowserDialog
         {
-            Description = "选择 Codex 可以工作的本地目录",
+            Description = "选择所选 Agent 可以访问的本地目录",
             UseDescriptionForTitle = true,
             ShowNewFolderButton = true,
             SelectedPath = Directory.Exists(WorkspacePath)

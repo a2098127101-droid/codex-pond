@@ -206,8 +206,8 @@ public sealed class DeepSeekHarnessAdapter : IAgentTaskLauncher, IAgentApprovalR
         Interlocked.Exchange(ref _cancelRequested, 0);
         _runCancellation?.Dispose();
         _runCancellation = new CancellationTokenSource();
-        _pipeName = $"CodexPond.Dsh.{Guid.NewGuid():N}";
-        var readyPipeName = $"CodexPond.Dsh.Ready.{Guid.NewGuid():N}";
+        _pipeName = AgentPipeAddress.Create("dsh");
+        var readyPipeName = AgentPipeAddress.Create("ready");
         var started = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         var bridgeReady = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _approvalBridgeReadyCompletion = bridgeReady;
@@ -436,7 +436,8 @@ public sealed class DeepSeekHarnessAdapter : IAgentTaskLauncher, IAgentApprovalR
                 var prompt = new AgentApprovalPrompt(requestId, ProviderId,
                     ReadString(root, "toolName") is { Length: > 0 } name ? $"DeepSeek 请求允许工具：{name}" : "DeepSeek 请求一次性操作授权",
                     ReadString(root, "reason") ?? "DeepSeek Harness 请求执行一项受审批保护的操作。",
-                    "仅允许这一次；不保存为会话授权", CanAllowOnce: true, CanReject: true);
+                    "仅允许这一次；不保存为会话授权", CanAllowOnce: true, CanReject: true,
+                    SessionId: _threadKey, TurnId: _activeTurnId);
                 var response = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 _approvalReplies[requestId] = response;
                 ApprovalPromptReceived?.Invoke(prompt);
@@ -581,12 +582,14 @@ public sealed class ClaudeCodeAgentAdapter : IAgentTaskLauncher, IAgentApprovalR
         _durableWorkflowObserved = false;
         _verifiedWorkflowCompletion = false;
         _verifiedWorkflowUnsuccessfulTerminal = false;
+        _lastResultSucceeded = false;
+        _finalText = null;
         _workflowRunIds.Clear();
         _toolNamesByUseId.Clear();
         Interlocked.Exchange(ref _cancelRequested, 0);
         _runCancellation?.Dispose();
         _runCancellation = new CancellationTokenSource();
-        _pipeName = $"CodexPond.Claude.{Guid.NewGuid():N}";
+        _pipeName = AgentPipeAddress.Create("claude");
         var startInfo = CreateStartInfo(cwd, _sessionId, prompt, _pipeName);
         _process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
         try
@@ -836,7 +839,8 @@ public sealed class ClaudeCodeAgentAdapter : IAgentTaskLauncher, IAgentApprovalR
                 var toolInput = request.TryGetProperty("tool_input", out var input) ? input.GetRawText() : "{}";
                 var prompt = new AgentApprovalPrompt(requestId, ProviderId,
                     $"Claude Code 请求权限：{toolName}", toolInput,
-                    "只授权当前这次操作；不会写入 Claude 或 Work Buddy 配置", CanAllowOnce: true, CanReject: true);
+                    "只授权当前这次操作；不会写入 Claude 或 Work Buddy 配置", CanAllowOnce: true, CanReject: true,
+                    SessionId: _threadKey, TurnId: _activeTurnId);
                 var response = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 _approvalReplies[requestId] = response;
                 ApprovalPromptReceived?.Invoke(prompt);

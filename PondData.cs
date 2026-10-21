@@ -34,6 +34,61 @@ public enum FishRarity { Common, Uncommon, Rare }
 public enum PondTheme { FusionCE, A, B, C, D, E }
 public enum AccessorySlot { Hat, LeftDecor, RightDecor }
 public enum PondMode { AgentPond, IndependentFishing }
+public enum FishingAssistMode { Gentle, Standard }
+
+/// <summary>Skill loop for standalone fishing only. Agent turns never use this challenge.</summary>
+public sealed class FishingChallenge
+{
+    private double _outsideSafeZoneSeconds;
+    private double _elapsedSeconds;
+    private readonly double _minimumTension;
+    private readonly double _maximumTension;
+    private readonly double _requiredSafeSeconds;
+    private readonly double _graceSeconds;
+
+    public FishingChallenge(FishingAssistMode mode)
+    {
+        Mode = mode;
+        _minimumTension = mode == FishingAssistMode.Gentle ? .16 : .31;
+        _maximumTension = mode == FishingAssistMode.Gentle ? .84 : .70;
+        _requiredSafeSeconds = mode == FishingAssistMode.Gentle ? 1.8 : 2.8;
+        _graceSeconds = mode == FishingAssistMode.Gentle ? 3.2 : 1.35;
+    }
+
+    public FishingAssistMode Mode { get; }
+    public double Tension { get; private set; } = .52;
+    public double SafeTime { get; private set; }
+    public bool IsComplete { get; private set; }
+    public bool IsBroken { get; private set; }
+    public bool IsTensionSafe => Tension >= _minimumTension && Tension <= _maximumTension;
+    public string TensionLabel => !IsTensionSafe ? "张力偏离，调整收线" : Tension < (_minimumTension + _maximumTension) / 2 ? "鱼线偏松" : "鱼线绷紧";
+
+    public void Advance(TimeSpan elapsed, bool reeling)
+    {
+        if (IsComplete || IsBroken) return;
+        var delta = Math.Clamp(elapsed.TotalSeconds, 0, .5);
+        if (delta <= 0) return;
+        _elapsedSeconds += delta;
+
+        // Fish tugs gently move tension; holding raises it and releasing lets the line relax.
+        var tug = Math.Sin(_elapsedSeconds * 2.15) * .11;
+        Tension = Math.Clamp(Tension + ((reeling ? .30 : -.21) + tug) * delta, 0, 1);
+        if (IsTensionSafe)
+        {
+            SafeTime += delta;
+            _outsideSafeZoneSeconds = 0;
+            if (SafeTime >= _requiredSafeSeconds) IsComplete = true;
+        }
+        else
+        {
+            _outsideSafeZoneSeconds += delta;
+            if (_outsideSafeZoneSeconds >= _graceSeconds || Tension is <= .02 or >= .98)
+                IsBroken = true;
+        }
+
+        if (_elapsedSeconds >= 16 && !IsComplete) IsBroken = true;
+    }
+}
 
 public sealed class FishingStateMachine
 {
@@ -107,7 +162,12 @@ public sealed record PondEnvironment(PondSeason Season, DayPhase Phase, PondWeat
     };
 }
 
-public sealed record PondEventDefinition(string Id, string Name, PondSeason Season, string LimitedFishId);
+public sealed record PondEventDefinition(
+    string Id,
+    string Name,
+    PondSeason Season,
+    string? LimitedFishId = null,
+    string VisualEffect = "ambient");
 public sealed record PondEvent(PondEventDefinition Definition, DateTimeOffset StartedAt, DateTimeOffset EndsAt)
 {
     public string Id => Definition.Id;
@@ -119,10 +179,14 @@ public static class PondEventCatalog
 {
     public static IReadOnlyList<PondEventDefinition> All { get; } =
     [
-        new("spring-petals", "樱草花瓣飘过水面", PondSeason.Spring, "petal-carp"),
-        new("summer-fireflies", "萤火虫在芦苇间亮起", PondSeason.Summer, "firefly-koi"),
-        new("autumn-leaves", "金色落叶旋进池塘", PondSeason.Autumn, "maple-carp"),
-        new("winter-frost", "池边结起一圈薄霜", PondSeason.Winter, "frost-fish")
+        new("spring-petals", "樱草花瓣飘过水面", PondSeason.Spring, "petal-carp", "petals"),
+        new("spring-dragonflies", "蜻蜓在浅水上点出小圈涟漪", PondSeason.Spring, null, "dragonflies"),
+        new("summer-fireflies", "萤火虫在芦苇间亮起", PondSeason.Summer, "firefly-koi", "fireflies"),
+        new("summer-dew", "莲叶上的雨珠映出一道微光", PondSeason.Summer, null, "dew"),
+        new("autumn-leaves", "金色落叶旋进池塘", PondSeason.Autumn, "maple-carp", "leaves"),
+        new("autumn-reed-wind", "晚风吹动池边芦苇", PondSeason.Autumn, null, "reed-wind"),
+        new("winter-frost", "池边结起一圈薄霜", PondSeason.Winter, "frost-fish", "frost"),
+        new("winter-ice-glint", "月色在冰纹上轻轻闪烁", PondSeason.Winter, null, "ice-glint")
     ];
 }
 
@@ -243,6 +307,72 @@ public sealed record FishRecord(
     public bool IsHistorical => Rarity is null;
 }
 
+public sealed record FishDiscoveryEntry(
+    FishSpecies Species,
+    bool IsDiscovered,
+    int CatchCount,
+    FishRecord? LatestCatch,
+    string Clue,
+    IReadOnlyList<string> Categories);
+
+public static class FishDiscoveryCatalog
+{
+    public static IReadOnlyList<FishDiscoveryEntry> Build(IReadOnlyList<FishRecord> catches)
+    {
+        var grouped = catches.GroupBy(record => record.FishId, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.OrderByDescending(record => record.CaughtAt).ToArray(), StringComparer.Ordinal);
+
+        return FishCatalog.All.Select(species =>
+        {
+            var history = grouped.TryGetValue(species.Id, out var records) ? records : [];
+            return new FishDiscoveryEntry(species, history.Length > 0, history.Length,
+                history.FirstOrDefault(), BuildClue(species), Categories(species));
+        }).ToArray();
+    }
+
+    public static string FilterLabel(string filter) => filter switch
+    {
+        "spring" => "春季", "summer" => "夏季", "autumn" => "秋季", "winter" => "冬季",
+        "dawn" => "黎明", "day" => "白天", "dusk" => "黄昏", "night" => "夜晚",
+        "event" => "限定事件", "undiscovered" => "尚未发现", _ => "全部"
+    };
+
+    public static bool MatchesFilter(FishDiscoveryEntry entry, string filter) => filter switch
+    {
+        "spring" => entry.Species.Seasons is null || entry.Species.Seasons.Contains(PondSeason.Spring),
+        "summer" => entry.Species.Seasons is null || entry.Species.Seasons.Contains(PondSeason.Summer),
+        "autumn" => entry.Species.Seasons is null || entry.Species.Seasons.Contains(PondSeason.Autumn),
+        "winter" => entry.Species.Seasons is null || entry.Species.Seasons.Contains(PondSeason.Winter),
+        "dawn" => entry.Species.Phases is null || entry.Species.Phases.Contains(DayPhase.Dawn),
+        "day" => entry.Species.Phases is null || entry.Species.Phases.Contains(DayPhase.Day),
+        "dusk" => entry.Species.Phases is null || entry.Species.Phases.Contains(DayPhase.Dusk),
+        "night" => entry.Species.Phases is null || entry.Species.Phases.Contains(DayPhase.Night),
+        "event" => entry.Species.IsEventFish,
+        "undiscovered" => !entry.IsDiscovered,
+        _ => true
+    };
+
+    private static string BuildClue(FishSpecies species)
+    {
+        var time = species.Phases is null ? "任何時段" : string.Join("、", species.Phases.Select(PhaseName));
+        var season = species.Seasons is null ? "四季" : string.Join("、", species.Seasons.Select(SeasonName));
+        var eventHint = species.EventId is null ? "" : "；留心對應的季節小事件";
+        return $"線索：{season} · {time}{eventHint}。{species.Description}";
+    }
+
+    private static IReadOnlyList<string> Categories(FishSpecies species)
+    {
+        var result = new List<string>();
+        result.AddRange((species.Seasons ?? Enum.GetValues<PondSeason>()).Select(value => value.ToString().ToLowerInvariant()));
+        result.AddRange((species.Phases ?? Enum.GetValues<DayPhase>()).Select(value => value.ToString().ToLowerInvariant()));
+        if (species.IsEventFish) result.Add("event");
+        return result;
+    }
+
+    private static string SeasonName(PondSeason value) => value switch { PondSeason.Spring => "春", PondSeason.Summer => "夏", PondSeason.Autumn => "秋", _ => "冬" };
+    private static string PhaseName(DayPhase value) => value switch { DayPhase.Dawn => "黎明", DayPhase.Day => "白天", DayPhase.Dusk => "黃昏", _ => "夜晚" };
+}
+
 public enum FishBookReadStatus { Empty, Loaded, Corrupt, Unreadable }
 
 public sealed record FishBookReadResult(FishBookReadStatus Status, IReadOnlyList<FishRecord> Records, string? Error = null)
@@ -345,7 +475,9 @@ public static class AccessoryCatalog
         new("summer-shell", "夏贝风铃", AccessorySlot.RightDecor, "钓到第一条夏季鱼", "Summer"),
         new("autumn-leaf", "枫叶标牌", AccessorySlot.RightDecor, "钓到第一条秋季鱼", "Autumn"),
         new("winter-star", "雪晶挂饰", AccessorySlot.RightDecor, "钓到第一条冬季鱼", "Winter"),
-        new("firefly-jar", "萤火玻璃罐", AccessorySlot.RightDecor, "钓到事件限定鱼", null, "event")
+        new("firefly-jar", "萤火玻璃罐", AccessorySlot.RightDecor, "钓到事件限定鱼", null, "event"),
+        new("four-season-mobile", "四季风铃", AccessorySlot.RightDecor, "发现至少一条春、夏、秋、冬的鱼", null, "four-seasons"),
+        new("moonlit-hat", "月光斗笠", AccessorySlot.Hat, "发现全部 20 种鱼", null, "all-fish")
     ];
 
     public static string ForSeason(PondSeason season) => season switch
@@ -371,10 +503,15 @@ public static class AccessoryUnlockRules
         }
 
         if (catches.Count >= 3) Unlock("grass-block");
+        var discoveredFish = catches.Select(record => record.FishId).Distinct(StringComparer.Ordinal).ToHashSet(StringComparer.Ordinal);
+        if (FishCatalog.All.All(species => discoveredFish.Contains(species.Id))) Unlock("moonlit-hat");
+        var discoveredSeasons = catches.Where(record => record.Season.HasValue).Select(record => record.Season!.Value).Distinct().ToHashSet();
+        if (Enum.GetValues<PondSeason>().All(discoveredSeasons.Contains)) Unlock("four-season-mobile");
         foreach (var record in catches)
         {
             if (record.Season is { } season) Unlock(ForSeason(season));
-            if (record.EventId is not null) Unlock("firefly-jar");
+            if (record.EventId is not null && FishCatalog.All.FirstOrDefault(species => species.Id == record.FishId)?.IsEventFish == true)
+                Unlock("firefly-jar");
         }
         return changed;
     }
@@ -406,6 +543,7 @@ public sealed class PondSettings
     public Dictionary<string, string> ProviderSessionWorkspaces { get; set; } = new(StringComparer.Ordinal);
     public string WorkBuddyDashboardUrl { get; set; } = "";
     public PondMode LastMode { get; set; } = PondMode.AgentPond;
+    public FishingAssistMode FishingAssistMode { get; set; } = FishingAssistMode.Gentle;
     public DateTimeOffset SettingsUpdatedAt { get; set; } = DateTimeOffset.UtcNow;
     public bool HasChosenWorkspace { get; set; }
     public string? LastThreadId { get; set; }
@@ -421,53 +559,88 @@ public sealed class PondSettings
     public List<string> UnlockedAccessoryIds { get; set; } = ["straw-hat"];
 }
 
+public enum PondSettingsLoadStatus { Missing, Loaded, RecoveredCorrupt, Unreadable }
+
+public sealed record PondSettingsLoadResult(PondSettingsLoadStatus Status, string? BackupPath = null, string? Error = null);
+
 public sealed class PondSettingsStore
 {
     private readonly string _path;
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+    private bool _writesBlocked;
+
+    public PondSettingsLoadResult LastLoadResult { get; private set; } = new(PondSettingsLoadStatus.Missing);
 
     public PondSettingsStore(string? dataDirectory = null)
     {
-        var root = dataDirectory ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CodexPond");
+        var root = dataDirectory ?? PondDataPaths.DefaultDirectory;
         Directory.CreateDirectory(root);
         _path = Path.Combine(root, "settings.json");
     }
 
     public PondSettings Load()
     {
+        _writesBlocked = false;
+        try { _ = File.GetAttributes(_path); }
+        catch (FileNotFoundException)
+        {
+            LastLoadResult = new PondSettingsLoadResult(PondSettingsLoadStatus.Missing);
+            return new PondSettings();
+        }
+        catch (DirectoryNotFoundException)
+        {
+            LastLoadResult = new PondSettingsLoadResult(PondSettingsLoadStatus.Missing);
+            return new PondSettings();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _writesBlocked = true;
+            LastLoadResult = new PondSettingsLoadResult(PondSettingsLoadStatus.Unreadable, Error: ex.Message);
+            return new PondSettings();
+        }
+
         try
         {
-            if (File.Exists(_path))
-            {
-                var settings = JsonSerializer.Deserialize<PondSettings>(File.ReadAllText(_path)) ?? new PondSettings();
-                if (!Enum.IsDefined(typeof(PondTheme), settings.Theme)) settings.Theme = PondTheme.FusionCE;
-                if (!Enum.IsDefined(typeof(PondMode), settings.LastMode)) settings.LastMode = PondMode.AgentPond;
-                settings.AgentProviderId ??= AgentProviderIds.Codex;
-                if (!AgentProviderCatalog.Available.Any(provider => provider.Id == settings.AgentProviderId)) settings.AgentProviderId = AgentProviderIds.Codex;
-                settings.ProviderSessions ??= new Dictionary<string, string>(StringComparer.Ordinal);
-                settings.ProviderSessionWorkspaces ??= new Dictionary<string, string>(StringComparer.Ordinal);
-                settings.WorkBuddyDashboardUrl ??= "";
-                settings.UnlockedAccessoryIds ??= ["straw-hat"];
-                if (!settings.UnlockedAccessoryIds.Contains("straw-hat", StringComparer.Ordinal))
-                    settings.UnlockedAccessoryIds.Add("straw-hat");
-                return settings;
-            }
+            var settings = JsonSerializer.Deserialize<PondSettings>(File.ReadAllText(_path));
+            if (settings is null) throw new JsonException("设置文件内容为空或不是设置对象。");
+            Normalize(settings);
+            LastLoadResult = new PondSettingsLoadResult(PondSettingsLoadStatus.Loaded);
+            return settings;
         }
-        catch (JsonException) { }
-        catch (IOException) { }
-        return new PondSettings();
+        catch (JsonException ex)
+        {
+            try
+            {
+                var backupPath = CreateCorruptBackupPath();
+                File.Move(_path, backupPath);
+                LastLoadResult = new PondSettingsLoadResult(PondSettingsLoadStatus.RecoveredCorrupt, backupPath, ex.Message);
+            }
+            catch (Exception backupError) when (backupError is IOException or UnauthorizedAccessException)
+            {
+                _writesBlocked = true;
+                LastLoadResult = new PondSettingsLoadResult(PondSettingsLoadStatus.Unreadable, Error:
+                    $"设置 JSON 损坏，且无法创建原文件备份：{backupError.Message}");
+            }
+            return new PondSettings();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _writesBlocked = true;
+            LastLoadResult = new PondSettingsLoadResult(PondSettingsLoadStatus.Unreadable, Error: ex.Message);
+            return new PondSettings();
+        }
     }
 
     public void Save(PondSettings settings)
     {
+        if (_writesBlocked)
+            throw new IOException($"设置文件无法安全读取，已暂停写入以保护原文件。{LastLoadResult.Error}");
         settings.SettingsUpdatedAt = DateTimeOffset.UtcNow;
         var temp = _path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
             File.WriteAllText(temp, JsonSerializer.Serialize(settings, JsonOptions));
-            if (File.Exists(_path)) File.Replace(temp, _path, null, ignoreMetadataErrors: true);
-            else File.Move(temp, _path);
+            File.Move(temp, _path, overwrite: true);
         }
         finally
         {
@@ -476,19 +649,41 @@ public sealed class PondSettingsStore
             catch (UnauthorizedAccessException) { }
         }
     }
+
+    private string CreateCorruptBackupPath()
+    {
+        var basePath = $"{_path}.corrupt-{DateTime.UtcNow:yyyyMMdd-HHmmssfff}";
+        var candidate = basePath + ".bak";
+        var suffix = 1;
+        while (File.Exists(candidate)) candidate = $"{basePath}-{suffix++}.bak";
+        return candidate;
+    }
+
+    private static void Normalize(PondSettings settings)
+    {
+        if (!Enum.IsDefined(typeof(PondTheme), settings.Theme)) settings.Theme = PondTheme.FusionCE;
+        if (!Enum.IsDefined(typeof(PondMode), settings.LastMode)) settings.LastMode = PondMode.AgentPond;
+        if (!Enum.IsDefined(typeof(FishingAssistMode), settings.FishingAssistMode)) settings.FishingAssistMode = FishingAssistMode.Gentle;
+        settings.AgentProviderId ??= AgentProviderIds.Codex;
+        if (!AgentProviderCatalog.Available.Any(provider => provider.Id == settings.AgentProviderId)) settings.AgentProviderId = AgentProviderIds.Codex;
+        settings.ProviderSessions ??= new Dictionary<string, string>(StringComparer.Ordinal);
+        settings.ProviderSessionWorkspaces ??= new Dictionary<string, string>(StringComparer.Ordinal);
+        settings.WorkBuddyDashboardUrl ??= "";
+        settings.UnlockedAccessoryIds ??= ["straw-hat"];
+        if (!settings.UnlockedAccessoryIds.Contains("straw-hat", StringComparer.Ordinal))
+            settings.UnlockedAccessoryIds.Add("straw-hat");
+    }
 }
 
 public sealed class FishBookStore
 {
     private static readonly object ProcessGate = new();
-    private static readonly Mutex FileMutex = new(false, @"Local\CodexPond.FishBook");
     private readonly string _path;
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     public FishBookStore(string? dataDirectory = null)
     {
-        var root = dataDirectory ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CodexPond");
+        var root = dataDirectory ?? PondDataPaths.DefaultDirectory;
         Directory.CreateDirectory(root);
         _path = Path.Combine(root, "fish-book.json");
     }
@@ -527,14 +722,15 @@ public sealed class FishBookStore
     public bool TryCatchCompletedTurn(string? status, string turnId, out FishRecord? record) =>
         TryCatchCompletedTurn(status, turnId, new FishCatchContext(PondEnvironment.At(DateTime.Now), null, 0, DateTimeOffset.Now), out record);
 
-    public bool TryCatchCompletedTurn(string? status, string turnId, FishCatchContext context, out FishRecord? record)
+    public bool TryCatchCompletedTurn(string? status, string turnId, FishCatchContext context, out FishRecord? record,
+        string? legacyTurnId = null)
     {
         if (!string.Equals(status, "completed", StringComparison.Ordinal) || string.IsNullOrWhiteSpace(turnId))
         {
             record = null;
             return false;
         }
-        return TryCatch(turnId, context, out record);
+        return TryCatch(turnId, context, out record, legacyTurnId);
     }
 
     public bool TryCatch(string turnId, out FishRecord? record) =>
@@ -547,12 +743,10 @@ public sealed class FishBookStore
     {
         lock (ProcessGate)
         {
-            var hasMutex = false;
+            FileStream? fileLock = null;
             try
             {
-                try { hasMutex = FileMutex.WaitOne(TimeSpan.FromSeconds(5)); }
-                catch (AbandonedMutexException) { hasMutex = true; }
-                if (!hasMutex) throw new TimeoutException("等待鱼册文件锁超时。");
+                fileLock = AcquireFileLock();
                 var read = ReadResult();
                 if (!read.CanAppend) throw new FishBookStorageException(read.Status, read.Error ?? "鱼册不可用，未合并云端记录。");
                 var merged = read.Records.ToDictionary(record => record.TurnId, StringComparer.Ordinal);
@@ -568,27 +762,30 @@ public sealed class FishBookStore
             }
             finally
             {
-                if (hasMutex) FileMutex.ReleaseMutex();
+                fileLock?.Dispose();
             }
         }
     }
 
     public bool TryCatch(string turnId, FishCatchContext context, out FishRecord? record)
+        => TryCatch(turnId, context, out record, null);
+
+    private bool TryCatch(string turnId, FishCatchContext context, out FishRecord? record, string? legacyTurnId)
     {
         lock (ProcessGate)
         {
-            var hasMutex = false;
+            FileStream? fileLock = null;
             try
             {
-                try { hasMutex = FileMutex.WaitOne(TimeSpan.FromSeconds(5)); }
-                catch (AbandonedMutexException) { hasMutex = true; }
-                if (!hasMutex) throw new TimeoutException("等待鱼册文件锁超时。");
+                fileLock = AcquireFileLock();
 
                 var read = ReadResult();
                 if (!read.CanAppend)
                     throw new FishBookStorageException(read.Status, read.Error ?? "鱼册不可用；为保护原文件，未写入新记录。");
                 var catches = read.Records.ToList();
-                record = catches.FirstOrDefault(x => string.Equals(x.TurnId, turnId, StringComparison.Ordinal));
+                record = catches.FirstOrDefault(x =>
+                    string.Equals(x.TurnId, turnId, StringComparison.Ordinal) ||
+                    (!string.IsNullOrWhiteSpace(legacyTurnId) && string.Equals(x.TurnId, legacyTurnId, StringComparison.Ordinal)));
                 if (record is not null) return false;
 
                 var species = FishCatalog.Choose(context);
@@ -600,7 +797,7 @@ public sealed class FishBookStore
             }
             finally
             {
-                if (hasMutex) FileMutex.ReleaseMutex();
+                fileLock?.Dispose();
             }
         }
     }
@@ -611,14 +808,41 @@ public sealed class FishBookStore
         try
         {
             File.WriteAllText(temp, JsonSerializer.Serialize(catches, JsonOptions));
-            if (File.Exists(_path)) File.Replace(temp, _path, null, ignoreMetadataErrors: true);
-            else File.Move(temp, _path);
+            File.Move(temp, _path, overwrite: true);
         }
         finally
         {
             try { if (File.Exists(temp)) File.Delete(temp); }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
+        }
+    }
+
+    private FileStream AcquireFileLock()
+    {
+        var lockPath = _path + ".lock";
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (true)
+        {
+            try { return new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
+            catch (IOException) when (DateTime.UtcNow < deadline) { Thread.Sleep(40); }
+            catch (IOException ex) { throw new TimeoutException("等待鱼册文件锁超时。", ex); }
+        }
+    }
+}
+
+public static class PondDataPaths
+{
+    public static string DefaultDirectory
+    {
+        get
+        {
+            var root = OperatingSystem.IsMacOS()
+                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Library", "Application Support")
+                : OperatingSystem.IsWindows()
+                    ? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
+                    : Environment.GetEnvironmentVariable("XDG_DATA_HOME") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "share");
+            return Path.Combine(root, "CodexPond");
         }
     }
 }

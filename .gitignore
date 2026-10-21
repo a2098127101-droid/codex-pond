@@ -16,6 +16,7 @@ TestResults/
 /SteamPipe/app_build.vdf
 /SteamPipe/depot_build_windows.vdf
 /SteamPipe/logs/
+/artifacts/
 
 # Local audit and developer scratch output
 /DESIGN-IS-*/

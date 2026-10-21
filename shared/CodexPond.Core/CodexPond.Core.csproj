@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>CodexPond.Core</AssemblyName>
+    <RootNamespace>CodexPond</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\AgentContracts.cs" Link="AgentContracts.cs" />
+    <Compile Include="..\..\PondData.cs" Link="PondData.cs" />
+    <Compile Include="..\..\CodexAppServerClient.cs" Link="CodexAppServerClient.cs" />
+    <Compile Include="..\..\ProcessAgentAdapters.cs" Link="ProcessAgentAdapters.cs" />
+    <Compile Include="..\..\ClaudePermissionMcpServer.cs" Link="ClaudePermissionMcpServer.cs" />
+    <Compile Include="..\..\CyberBuddhaSeal.cs" Link="CyberBuddhaSeal.cs" />
+  </ItemGroup>
+</Project>
