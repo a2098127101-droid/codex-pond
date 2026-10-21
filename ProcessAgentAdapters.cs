@@ -582,6 +582,8 @@ public sealed class ClaudeCodeAgentAdapter : IAgentTaskLauncher, IAgentApprovalR
         _durableWorkflowObserved = false;
         _verifiedWorkflowCompletion = false;
         _verifiedWorkflowUnsuccessfulTerminal = false;
+        _lastResultSucceeded = false;
+        _finalText = null;
         _workflowRunIds.Clear();
         _toolNamesByUseId.Clear();
         Interlocked.Exchange(ref _cancelRequested, 0);

@@ -37,7 +37,14 @@ internal static class Program
         if (args.Length > 0 && args[0] == "--fake-dsh")
             return await RunFakeDshAsync(args.Contains("--fake-no-ready"), args.Contains("--fake-bad-ready"));
         if (args.Length > 0 && args[0] == "--fake-claude")
-            return await RunFakeClaudeAsync(args.Contains("--fake-wrong-status"), !args.Contains("--fake-no-approval"));
+        {
+            var resultMarkerIndex = Array.IndexOf(args, "--fake-result-marker");
+            var resultMarker = resultMarkerIndex >= 0 && resultMarkerIndex + 1 < args.Length
+                ? args[resultMarkerIndex + 1]
+                : null;
+            return await RunFakeClaudeAsync(args.Contains("--fake-wrong-status"), !args.Contains("--fake-no-approval"),
+                args.Contains("--fake-no-result-after-first"), resultMarker);
+        }
 
         var scratch = Path.Combine(Path.GetTempPath(), "codex-pond-smoke-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(scratch);
@@ -696,6 +703,32 @@ internal static class Program
             Assert(completed.ProviderPayload is WorkBuddyRunEvidence { InitializationSucceeded: true, DurableWorkflowObserved: true, VerifiedWorkflowCompletion: false },
                 "a status result for a different workflow ID must not count as terminal evidence");
         }
+
+        var resultMarker = Path.Combine(scratch, "claude-result-marker.txt");
+        await using (var claude = new ClaudeCodeAgentAdapter("dotnet", "CodexPond.exe",
+            [assemblyPath, "--fake-claude", "--fake-no-approval", "--fake-no-result-after-first", "--fake-result-marker", resultMarker]))
+        {
+            var terminalCount = 0;
+            var firstTerminal = new TaskCompletionSource<AgentEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var secondTerminal = new TaskCompletionSource<AgentEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
+            claude.AgentEventReceived += item =>
+            {
+                if (item.Kind is not (AgentEventKind.Completed or AgentEventKind.Failed or AgentEventKind.Cancelled or AgentEventKind.Disconnected)) return;
+                if (Interlocked.Increment(ref terminalCount) == 1) firstTerminal.TrySetResult(item);
+                else secondTerminal.TrySetResult(item);
+            };
+
+            var threadId = await claude.StartThreadAsync("dotnet", scratch);
+            await claude.StartTurnAsync(threadId, "first Work Buddy result smoke", scratch);
+            var first = await firstTerminal.Task.WaitAsync(TimeSpan.FromSeconds(8));
+            Assert(first.Kind == AgentEventKind.Completed && first.Text == "模拟 Work Buddy 任务完成",
+                "the first Work Buddy turn should establish a successful result and final text");
+
+            await claude.StartTurnAsync(threadId, "second Work Buddy missing-result smoke", scratch);
+            var second = await secondTerminal.Task.WaitAsync(TimeSpan.FromSeconds(8));
+            Assert(second.Kind == AgentEventKind.Failed && second.Status == "exit_0" && second.Text is null,
+                "a later Work Buddy process without a result event must not reuse the prior turn's success or final text");
+        }
     }
 
     private static async Task<int> RunFakeDshAsync(bool skipReadyHandshake, bool sendBadReadyHandshake)
@@ -727,7 +760,7 @@ internal static class Program
         return 0;
     }
 
-    private static async Task<int> RunFakeClaudeAsync(bool wrongStatus, bool requestApproval)
+    private static async Task<int> RunFakeClaudeAsync(bool wrongStatus, bool requestApproval, bool noResultAfterFirst, string? resultMarker)
     {
         _ = await Console.In.ReadLineAsync();
         WriteStreamEvent(new { type = "system", subtype = "init", session_id = "fake-claude-session" });
@@ -746,7 +779,11 @@ internal static class Program
         WriteWorkBuddyToolUse("status-1", "mcp__work-buddy__wb_status");
         var statusId = wrongStatus ? "wf_deadbeef" : "wf_1a2b3c4d";
         WriteWorkBuddyToolResult("status-1", $"{{\"workflow_run_id\":\"{statusId}\",\"status\":\"completed\"}}");
-        WriteStreamEvent(new { type = "result", result = "模拟 Work Buddy 任务完成", session_id = "fake-claude-session", is_error = false });
+        var omitResult = noResultAfterFirst && resultMarker is not null && File.Exists(resultMarker);
+        if (noResultAfterFirst && resultMarker is not null && !omitResult)
+            File.WriteAllText(resultMarker, "first turn emitted a result");
+        if (!omitResult)
+            WriteStreamEvent(new { type = "result", result = "模拟 Work Buddy 任务完成", session_id = "fake-claude-session", is_error = false });
         return 0;
     }
 
