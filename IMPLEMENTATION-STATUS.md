@@ -6,13 +6,17 @@ Status date: 2026-10-21
 
 - Windows .NET 8 WPF desktop pond with six scene layouts, seasonal/time-of-day presentation, 20 fish sprites, a fish book, accessories, local random events, and standalone fishing mode.
 - Generic Agent lifecycle contracts and launch adapters for Codex App Server, DeepSeek Harness headless CLI, and Claude Code with Work Buddy MCP.
+- Agent event routing validates the active provider instance, session ID, and turn ID; Codex App Server disconnect events are scoped to their originating process.
 - Conservative fish-award rules: a verified successful Agent turn earns one fish; failure, cancellation, disconnection, unknown terminal state, or duplicate turn IDs do not.
-- Local fish-book/settings persistence, corruption protection, anonymous activity-pulse option, Steamworks.NET integration scaffolding, and SteamPipe preparation scripts.
+- Corrupt settings are moved to a timestamped backup before defaults are used; unreadable settings are protected from writes. The startup notice reports the recovery result.
+- Agent and independent catches report Steam stats from the same local fish ledger; cloud merges reconcile the stats after deduplicating records.
+- Local fish-book/settings persistence, anonymous activity-pulse option, Steamworks.NET integration scaffolding, and SteamPipe preparation scripts.
 
 ## Verification performed
 
 - Release build of the WPF solution completed with 0 warnings and 0 errors in the implementation workspace.
-- Smoke suite passed using fake Codex App Server, DSH CLI, Claude CLI, Work Buddy MCP, and Steam interfaces. This checks protocol/state handling and privacy boundaries; it is not a real-provider end-to-end test.
+- Smoke suite passed using fake Codex App Server, DSH CLI, Claude CLI, Work Buddy MCP, and Steam interfaces. It covers settings recovery, provider/session/turn event isolation, shared fish stats, and the existing protocol and privacy checks. This is not a real-provider end-to-end test.
+- Added `.github/workflows/windows-validation.yml` to run Windows .NET restore, Release build, and smoke validation on pushes and pull requests to `main`, plus manual dispatch. The workflow has not yet run on GitHub.
 - DSH approval bridge JavaScript syntax check passed.
 - Windows x64 self-contained staging was generated successfully. The executable is unsigned. The Steamworks native redistributable was not present in that staging.
 

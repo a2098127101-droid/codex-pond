@@ -50,12 +50,13 @@ internal static class Program
             CheckLegacyCompatibility(scratch);
             CheckPondAssets();
             CheckGenericProviderContracts();
+            CheckAgentEventIsolation();
             CheckApprovalBoundary();
             CheckWorkBuddyTerminalEvidence();
             CheckDualModesAndSteam(scratch);
             await CheckProcessConnectorsAsync(scratch);
             await CheckProtocolAsync(scratch);
-            Console.WriteLine("PASS: pond assets and seasons, independent fishing records, fish ledger compatibility and corruption protection, generic Agent contracts, fake DSH process events and one-shot approval, fake Claude/Work Buddy MCP and permission flow, conservative workflow terminal evidence, Steam cloud merge/deduplication/settings whitelist/offline behavior/achievement thresholds, approval boundaries, authoritative Codex turn IDs, and fake App Server completion/cancellation.");
+            Console.WriteLine("PASS: settings corruption recovery, provider/session/turn event isolation, shared Steam fish stats for Agent and manual catches, pond assets and seasons, fish ledger compatibility, fake DSH and Work Buddy process flows, approval boundaries, cloud merge/deduplication, and authoritative Codex turn IDs.");
             return 0;
         }
         catch (Exception ex)
@@ -257,6 +258,22 @@ internal static class Program
         Assert(restored.Theme == PondTheme.D && !restored.TrackInputActivity && restored.UnlockedAccessoryIds.Contains("grass-block") &&
                restored.RightDecorId == "spring-bloom", "theme, input opt-out, unlocks and equipment should persist");
 
+        var corruptSettingsDirectory = Path.Combine(scratch, "corrupt-settings");
+        Directory.CreateDirectory(corruptSettingsDirectory);
+        var corruptSettingsPath = Path.Combine(corruptSettingsDirectory, "settings.json");
+        const string corruptSettingsContent = "{ not valid settings JSON";
+        File.WriteAllText(corruptSettingsPath, corruptSettingsContent);
+        var corruptSettingsStore = new PondSettingsStore(corruptSettingsDirectory);
+        var recoveredSettings = corruptSettingsStore.Load();
+        var recovery = corruptSettingsStore.LastLoadResult;
+        Assert(recovery.Status == PondSettingsLoadStatus.RecoveredCorrupt && recovery.BackupPath is not null,
+            "corrupt settings should return defaults only after creating a recovery backup");
+        Assert(!File.Exists(corruptSettingsPath) && File.ReadAllText(recovery.BackupPath!) == corruptSettingsContent,
+            "settings recovery must preserve the exact corrupt source instead of overwriting it");
+        corruptSettingsStore.Save(recoveredSettings);
+        Assert(new PondSettingsStore(corruptSettingsDirectory).Load().Theme == PondTheme.FusionCE,
+            "the recovered defaults should be writable and readable on the next launch");
+
         var store = new FishBookStore(Path.Combine(scratch, "fishbook"));
         Assert(!store.TryCatchCompletedTurn("failed", "failed-turn", out _), "failed turns must not enter the fish book");
         Assert(!store.TryCatchCompletedTurn("interrupted", "cancelled-turn", out _), "interrupted turns must not enter the fish book");
@@ -424,6 +441,46 @@ internal static class Program
         Assert(observed?.Kind == AgentEventKind.Started && observed.SessionId == "external-task-1", "external monitor should publish provider-neutral Agent events");
     }
 
+    private static void CheckAgentEventIsolation()
+    {
+        var active = new FakeAgentLauncher(AgentProviderIds.Codex);
+        var previousProvider = new FakeAgentLauncher(AgentProviderIds.DeepSeekHarness);
+        var otherProviderEvent = new AgentEvent(AgentEventKind.Disconnected, AgentProviderIds.DeepSeekHarness,
+            "dsh-session-1", "dsh-turn-1", "late disconnect", "disconnected");
+        Assert(!AgentEventIsolation.IsCurrentTurnEvent(previousProvider, active, otherProviderEvent, true, "codex-session-2", "codex-turn-2"),
+            "a previous provider's disconnect must not reset the active provider's turn");
+
+        var staleSession = new AgentEvent(AgentEventKind.StepCompleted, AgentProviderIds.Codex,
+            "codex-session-1", "codex-turn-2", Status: "completed");
+        Assert(!AgentEventIsolation.IsCurrentTurnEvent(active, active, staleSession, true, "codex-session-2", "codex-turn-2"),
+            "an event from an earlier session must be ignored even when its turn ID matches");
+        var staleTurn = new AgentEvent(AgentEventKind.Disconnected, AgentProviderIds.Codex,
+            "codex-session-2", "codex-turn-1", "late disconnect", "disconnected");
+        Assert(!AgentEventIsolation.IsCurrentTurnEvent(active, active, staleTurn, true, "codex-session-2", "codex-turn-2"),
+            "an earlier turn's disconnect must not reset a later turn in the same session");
+        var uncorrelatedDisconnect = new AgentEvent(AgentEventKind.Disconnected, AgentProviderIds.Codex,
+            Text: "unscoped disconnect", Status: "disconnected");
+        Assert(!AgentEventIsolation.IsCurrentTurnEvent(active, active, uncorrelatedDisconnect, true, "codex-session-2", "codex-turn-2"),
+            "a disconnect without matching session and turn IDs must fail closed");
+        var lateStart = new AgentEvent(AgentEventKind.Started, AgentProviderIds.Codex,
+            "codex-session-2", "codex-turn-1", Status: "running");
+        Assert(!AgentEventIsolation.IsCurrentTurnEvent(active, active, lateStart, true, "codex-session-2", null,
+                new HashSet<string>([AgentEventIsolation.TurnKey(AgentProviderIds.Codex, "codex-turn-1")], StringComparer.Ordinal)),
+            "a delayed start event for a terminal turn must not attach to a new turn");
+        var dsh = new FakeAgentLauncher(AgentProviderIds.DeepSeekHarness);
+        var sameRawIdDifferentProvider = new AgentEvent(AgentEventKind.Started, AgentProviderIds.DeepSeekHarness,
+            "dsh-session", "codex-turn-1", Status: "running");
+        Assert(AgentEventIsolation.IsCurrentTurnEvent(dsh, dsh, sameRawIdDifferentProvider, true, "dsh-session", null,
+                new HashSet<string>([AgentEventIsolation.TurnKey(AgentProviderIds.Codex, "codex-turn-1")], StringComparer.Ordinal)),
+            "terminal turn IDs must be scoped to their provider");
+        var currentDisconnect = new AgentEvent(AgentEventKind.Disconnected, AgentProviderIds.Codex,
+            "codex-session-2", "codex-turn-2", "current disconnect", "disconnected");
+        Assert(AgentEventIsolation.IsCurrentTurnEvent(active, active, currentDisconnect, true, "codex-session-2", "codex-turn-2"),
+            "a disconnect correlated to the active provider, session and turn should be handled");
+        Assert(!AgentEventIsolation.IsCurrentTurnEvent(active, active, currentDisconnect, false, "codex-session-2", "codex-turn-2"),
+            "events received outside an active turn should not change the visible turn state");
+    }
+
     private static void CheckWorkBuddyTerminalEvidence()
     {
         Assert(WorkBuddyProtocolEvidence.ContainsWorkflowRunId("""{"workflow_run_id":"wf_1a2b3c4d"}"""),
@@ -462,6 +519,29 @@ internal static class Program
             new DateTimeOffset(2026, 7, 15, 12, 0, 0, TimeSpan.Zero));
         Assert(fishBook.TryCatchManual(catchContext, out var localFish) && localFish is not null,
             "independent fishing should record a local catch without an Agent session");
+        var modeProgressBook = new FishBookStore(Path.Combine(scratch, "steam-mode-parity"));
+        var progressSteam = new FakeSteamPlatformService();
+        progressSteam.Initialize();
+        Assert(modeProgressBook.TryCatchManual(catchContext, out _) &&
+               FishProgressReporter.Report(progressSteam, modeProgressBook),
+            "manual catches should report their fish ledger to Steam stats");
+        Assert(modeProgressBook.TryCatchCompletedTurn("completed", "agent-progress-turn", catchContext, out _) &&
+               FishProgressReporter.Report(progressSteam, modeProgressBook),
+            "Agent catches should use the same fish ledger reporting path");
+        Assert(modeProgressBook.TryCatchCompletedTurn("completed", AgentEventIsolation.TurnKey(AgentProviderIds.Codex, "shared-turn-id"), catchContext, out _) &&
+               modeProgressBook.TryCatchCompletedTurn("completed", AgentEventIsolation.TurnKey(AgentProviderIds.DeepSeekHarness, "shared-turn-id"), catchContext, out _),
+            "providers that return the same raw turn ID must still get distinct fish records");
+        FishProgressReporter.Report(progressSteam, modeProgressBook);
+        var legacyTurnBook = new FishBookStore(Path.Combine(scratch, "steam-legacy-turn"));
+        Assert(legacyTurnBook.TryCatchCompletedTurn("completed", "legacy-turn-id", catchContext, out _),
+            "a pre-namespacing Agent turn should already exist in the local fish book");
+        Assert(!legacyTurnBook.TryCatchCompletedTurn("completed", AgentEventIsolation.TurnKey(AgentProviderIds.Codex, "legacy-turn-id"),
+                catchContext, out _, legacyTurnId: "legacy-turn-id") && legacyTurnBook.ReadAll().Count == 1,
+            "namespaced turn IDs should still deduplicate legacy records from earlier versions");
+        var modeProgressRecords = modeProgressBook.ReadAll();
+        Assert(progressSteam.FishCaughtStat == modeProgressRecords.Count &&
+               progressSteam.DiscoveredSpeciesStat == modeProgressRecords.Select(record => record.FishId).Distinct(StringComparer.Ordinal).Count(),
+            "manual and Agent catches should produce identical authoritative Steam fish and species totals");
         var remoteFish = new FishRecord("steam-cloud-fish-2", "river-minnow", "河银鱼", "#9CC9B5",
             new DateTimeOffset(2026, 7, 16, 12, 0, 0, TimeSpan.Zero), FishRarity.Common, PondSeason.Summer);
         var cloudSettings = new PondCloudSettings(DateTimeOffset.UtcNow.AddHours(1), PondTheme.D, "straw-hat",
@@ -477,6 +557,9 @@ internal static class Program
             "newer cloud presentation/game settings should apply and persist locally");
         Assert(steam.CloudSave is not null && steam.CloudSave.Catches.Count == 2,
             "fake Steam sync should write the merged fish book back to its cloud snapshot");
+        Assert(steam.FishCaughtStat == fishBook.ReadAll().Count &&
+               steam.DiscoveredSpeciesStat == fishBook.ReadAll().Select(record => record.FishId).Distinct(StringComparer.Ordinal).Count(),
+            "Steam catch stats should reconcile to the authoritative ledger after cloud merging");
         var cloudJson = JsonSerializer.Serialize(steam.CloudSave);
         foreach (var privateField in new[] { "prompt", "conversation", "workspace", "credential", "runtimeLog" })
             Assert(!cloudJson.Contains(privateField, StringComparison.OrdinalIgnoreCase),
@@ -934,6 +1017,7 @@ internal sealed class FakeAgentMonitor : IAgentTaskMonitor
         CanRespondToApprovals: false,
         CanAcceptUserInput: false);
     public event Action<AgentEvent>? AgentEventReceived;
+    public void Emit(AgentEvent agentEvent) => AgentEventReceived?.Invoke(agentEvent);
 
     public Task ObserveExternalTaskAsync(string externalTaskId, CancellationToken cancellationToken = default)
     {
@@ -942,6 +1026,24 @@ internal sealed class FakeAgentMonitor : IAgentTaskMonitor
         AgentEventReceived?.Invoke(new AgentEvent(AgentEventKind.Started, ProviderId, externalTaskId, externalTaskId, Status: "observing"));
         return Task.CompletedTask;
     }
+}
+
+internal sealed class FakeAgentLauncher : IAgentTaskLauncher
+{
+    public FakeAgentLauncher(string providerId) => ProviderId = providerId;
+    public string ProviderId { get; }
+    public AgentProviderCapabilities Capabilities { get; } = new(
+        CanLaunchTasks: true,
+        CanObserveExternalTasks: false,
+        CanCancel: true,
+        CanRespondToApprovals: false,
+        CanAcceptUserInput: false);
+    public event Action<AgentEvent>? AgentEventReceived;
+    public void Emit(AgentEvent agentEvent) => AgentEventReceived?.Invoke(agentEvent);
+    public Task<string> StartThreadAsync(string executable, string cwd, string? resumeThreadId = null) =>
+        Task.FromResult(resumeThreadId ?? Guid.NewGuid().ToString("N"));
+    public Task<string> StartTurnAsync(string threadId, string prompt, string cwd) => Task.FromResult(Guid.NewGuid().ToString("N"));
+    public Task InterruptTurnAsync(string threadId, string turnId) => Task.CompletedTask;
 }
 
 internal sealed class HighestRandom : Random

@@ -46,6 +46,8 @@ dotnet build .\CodexPond.sln -c Release
 
 The smoke project is in `tests/CodexPond.Smoke`. Fake provider tests do not prove real provider authentication or runtime compatibility.
 
+GitHub Actions runs dependency restore, a Release build, and the smoke suite on pushes to `main`, pull requests targeting `main`, and manual dispatches, using a Windows runner.
+
 ## Privacy and permissions
 
 - Provider CLIs use their own local sign-in, sandbox, and approval settings.

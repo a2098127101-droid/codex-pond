@@ -62,7 +62,7 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </ScrollViewer>
-                    <TextBlock x:Name="EmptyText" Text="鱼册还是空的。&#10;完成一轮 Codex 任务，第一条鱼就会来池塘报到。" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" FontFamily="Microsoft YaHei UI" FontSize="11" Foreground="#6C674F" TextWrapping="Wrap" Margin="22" IsHitTestVisible="False"/>
+                    <TextBlock x:Name="EmptyText" Text="鱼册还是空的。&#10;完成一轮 Agent 任务，或在独立模式钓鱼，第一条鱼就会来池塘报到。" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" FontFamily="Microsoft YaHei UI" FontSize="11" Foreground="#6C674F" TextWrapping="Wrap" Margin="22" IsHitTestVisible="False"/>
                 </Grid>
                 <Border Grid.Row="3" Margin="10,1,10,6" Padding="6,3" Background="#BBA077">
                     <TextBlock Text="鱼获只保存在这台电脑的本地鱼册中。" FontFamily="Microsoft YaHei UI" FontSize="9" Foreground="#443A2B" VerticalAlignment="Center"/>

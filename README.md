@@ -46,6 +46,8 @@ dotnet build .\CodexPond.sln -c Release
 
 冒烟验证项目位于 [tests/CodexPond.Smoke](tests/CodexPond.Smoke)。模拟提供方测试不能证明真实提供方的登录流程或运行时兼容性。
 
+GitHub Actions 会在推送到 `main`、针对 `main` 的拉取请求，以及手动触发时，在 Windows runner 上执行依赖还原、Release 构建和冒烟验证。
+
 ## 隐私与权限
 
 - 各提供方 CLI 使用其自身的本地登录、沙箱和审批设置。

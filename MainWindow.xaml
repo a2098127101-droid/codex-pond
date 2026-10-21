@@ -34,7 +34,7 @@
                  Focusable="True"
                  KeyboardNavigation.TabIndex="0"
                  AutomationProperties.Name="池塘水面"
-                 AutomationProperties.HelpText="按 Enter 打开 Codex 任务面板，按空格激起涟漪；鼠标单击水面也会激起涟漪，拖动可移动池塘。"
+                 AutomationProperties.HelpText="按 Enter 打开 Agent 任务面板，按空格激起涟漪；鼠标单击水面也会激起涟漪，拖动可移动池塘。"
                  ToolTip="单击水面泛起涟漪；双击池塘打开任务面板；拖动可移动池塘"
                  MouseLeftButtonDown="PondHitTarget_MouseLeftButtonDown"
                  MouseMove="PondHitTarget_MouseMove"
@@ -81,9 +81,9 @@
                 BorderBrush="Transparent"
                 BorderThickness="0"
                 Cursor="Hand"
-                AutomationProperties.Name="打开 Codex 任务面板"
-                AutomationProperties.HelpText="查看 Codex 回复和处理待办请求"
-                ToolTip="打开 Codex 回复与任务记录"
+                AutomationProperties.Name="打开 Agent 任务面板"
+                AutomationProperties.HelpText="查看所选 Agent 的回复和处理待办请求"
+                ToolTip="打开 Agent 回复与任务记录"
                 Click="PondStatusButton_Click">
             <Button.Template>
                 <ControlTemplate TargetType="Button">

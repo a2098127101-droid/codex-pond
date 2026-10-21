@@ -26,6 +26,20 @@ public interface ISteamPlatformService : IDisposable
     void OnFishCaught(int totalFish, int discoveredSpecies);
 }
 
+/// <summary>Reports the same authoritative local fish ledger to Steam after either fishing mode catches a fish.</summary>
+public static class FishProgressReporter
+{
+    public static bool Report(ISteamPlatformService? platform, FishBookStore fishBook)
+    {
+        if (platform is null) return false;
+        var read = fishBook.ReadResult();
+        if (!read.CanAppend) return false;
+        platform.OnFishCaught(read.Records.Count,
+            read.Records.Select(record => record.FishId).Distinct(StringComparer.Ordinal).Count());
+        return true;
+    }
+}
+
 /// <summary>Steamworks.NET implementation. Native/API absence is a supported offline state.</summary>
 public sealed class SteamPlatformService : ISteamPlatformService
 {
@@ -116,6 +130,8 @@ public sealed class SteamPlatformService : ISteamPlatformService
 
             var currentRead = fishBook.ReadResult();
             if (!currentRead.CanAppend) return;
+            OnFishCaught(currentRead.Records.Count,
+                currentRead.Records.Select(record => record.FishId).Distinct(StringComparer.Ordinal).Count());
             WriteCloudSave(new PondCloudSave(1, DateTimeOffset.UtcNow, currentRead.Records, CaptureCloudSettings(settings)));
             _status = "Steam 云存档已合并；鱼册按记录 ID 去重。";
         }
@@ -224,6 +240,8 @@ public sealed class FakeSteamPlatformService : ISteamPlatformService
     public string Status { get; private set; }
     public PondCloudSave? CloudSave { get; set; }
     public HashSet<string> Achievements { get; } = new(StringComparer.Ordinal);
+    public int FishCaughtStat { get; private set; }
+    public int DiscoveredSpeciesStat { get; private set; }
     public void Initialize()
     {
         IsAvailable = _availableOnInitialize;
@@ -246,13 +264,19 @@ public sealed class FakeSteamPlatformService : ISteamPlatformService
         }
         var finalRead = fishBook.ReadResult();
         if (finalRead.CanAppend)
+        {
+            OnFishCaught(finalRead.Records.Count,
+                finalRead.Records.Select(record => record.FishId).Distinct(StringComparer.Ordinal).Count());
             CloudSave = new PondCloudSave(1, DateTimeOffset.UtcNow, finalRead.Records,
                 new PondCloudSettings(settings.SettingsUpdatedAt, settings.Theme, settings.EquippedHatId, settings.LeftDecorId,
                     settings.RightDecorId, settings.UnlockedAccessoryIds.ToArray(), settings.LastMode));
+        }
         Status = "模拟云存档已合并";
     }
     public void OnFishCaught(int totalFish, int discoveredSpecies)
     {
+        FishCaughtStat = totalFish;
+        DiscoveredSpeciesStat = discoveredSpecies;
         if (totalFish >= 1) Achievements.Add("POND_FIRST_CATCH");
         if (totalFish >= 20) Achievements.Add("POND_CATCH_20");
         if (discoveredSpecies >= FishCatalog.All.Count) Achievements.Add("POND_ALL_FISH");

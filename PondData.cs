@@ -421,10 +421,17 @@ public sealed class PondSettings
     public List<string> UnlockedAccessoryIds { get; set; } = ["straw-hat"];
 }
 
+public enum PondSettingsLoadStatus { Missing, Loaded, RecoveredCorrupt, Unreadable }
+
+public sealed record PondSettingsLoadResult(PondSettingsLoadStatus Status, string? BackupPath = null, string? Error = null);
+
 public sealed class PondSettingsStore
 {
     private readonly string _path;
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+    private bool _writesBlocked;
+
+    public PondSettingsLoadResult LastLoadResult { get; private set; } = new(PondSettingsLoadStatus.Missing);
 
     public PondSettingsStore(string? dataDirectory = null)
     {
@@ -436,31 +443,61 @@ public sealed class PondSettingsStore
 
     public PondSettings Load()
     {
+        _writesBlocked = false;
+        try { _ = File.GetAttributes(_path); }
+        catch (FileNotFoundException)
+        {
+            LastLoadResult = new PondSettingsLoadResult(PondSettingsLoadStatus.Missing);
+            return new PondSettings();
+        }
+        catch (DirectoryNotFoundException)
+        {
+            LastLoadResult = new PondSettingsLoadResult(PondSettingsLoadStatus.Missing);
+            return new PondSettings();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _writesBlocked = true;
+            LastLoadResult = new PondSettingsLoadResult(PondSettingsLoadStatus.Unreadable, Error: ex.Message);
+            return new PondSettings();
+        }
+
         try
         {
-            if (File.Exists(_path))
-            {
-                var settings = JsonSerializer.Deserialize<PondSettings>(File.ReadAllText(_path)) ?? new PondSettings();
-                if (!Enum.IsDefined(typeof(PondTheme), settings.Theme)) settings.Theme = PondTheme.FusionCE;
-                if (!Enum.IsDefined(typeof(PondMode), settings.LastMode)) settings.LastMode = PondMode.AgentPond;
-                settings.AgentProviderId ??= AgentProviderIds.Codex;
-                if (!AgentProviderCatalog.Available.Any(provider => provider.Id == settings.AgentProviderId)) settings.AgentProviderId = AgentProviderIds.Codex;
-                settings.ProviderSessions ??= new Dictionary<string, string>(StringComparer.Ordinal);
-                settings.ProviderSessionWorkspaces ??= new Dictionary<string, string>(StringComparer.Ordinal);
-                settings.WorkBuddyDashboardUrl ??= "";
-                settings.UnlockedAccessoryIds ??= ["straw-hat"];
-                if (!settings.UnlockedAccessoryIds.Contains("straw-hat", StringComparer.Ordinal))
-                    settings.UnlockedAccessoryIds.Add("straw-hat");
-                return settings;
-            }
+            var settings = JsonSerializer.Deserialize<PondSettings>(File.ReadAllText(_path));
+            if (settings is null) throw new JsonException("设置文件内容为空或不是设置对象。");
+            Normalize(settings);
+            LastLoadResult = new PondSettingsLoadResult(PondSettingsLoadStatus.Loaded);
+            return settings;
         }
-        catch (JsonException) { }
-        catch (IOException) { }
-        return new PondSettings();
+        catch (JsonException ex)
+        {
+            try
+            {
+                var backupPath = CreateCorruptBackupPath();
+                File.Move(_path, backupPath);
+                LastLoadResult = new PondSettingsLoadResult(PondSettingsLoadStatus.RecoveredCorrupt, backupPath, ex.Message);
+            }
+            catch (Exception backupError) when (backupError is IOException or UnauthorizedAccessException)
+            {
+                _writesBlocked = true;
+                LastLoadResult = new PondSettingsLoadResult(PondSettingsLoadStatus.Unreadable, Error:
+                    $"设置 JSON 损坏，且无法创建原文件备份：{backupError.Message}");
+            }
+            return new PondSettings();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _writesBlocked = true;
+            LastLoadResult = new PondSettingsLoadResult(PondSettingsLoadStatus.Unreadable, Error: ex.Message);
+            return new PondSettings();
+        }
     }
 
     public void Save(PondSettings settings)
     {
+        if (_writesBlocked)
+            throw new IOException($"设置文件无法安全读取，已暂停写入以保护原文件。{LastLoadResult.Error}");
         settings.SettingsUpdatedAt = DateTimeOffset.UtcNow;
         var temp = _path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
@@ -475,6 +512,29 @@ public sealed class PondSettingsStore
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
         }
+    }
+
+    private string CreateCorruptBackupPath()
+    {
+        var basePath = $"{_path}.corrupt-{DateTime.UtcNow:yyyyMMdd-HHmmssfff}";
+        var candidate = basePath + ".bak";
+        var suffix = 1;
+        while (File.Exists(candidate)) candidate = $"{basePath}-{suffix++}.bak";
+        return candidate;
+    }
+
+    private static void Normalize(PondSettings settings)
+    {
+        if (!Enum.IsDefined(typeof(PondTheme), settings.Theme)) settings.Theme = PondTheme.FusionCE;
+        if (!Enum.IsDefined(typeof(PondMode), settings.LastMode)) settings.LastMode = PondMode.AgentPond;
+        settings.AgentProviderId ??= AgentProviderIds.Codex;
+        if (!AgentProviderCatalog.Available.Any(provider => provider.Id == settings.AgentProviderId)) settings.AgentProviderId = AgentProviderIds.Codex;
+        settings.ProviderSessions ??= new Dictionary<string, string>(StringComparer.Ordinal);
+        settings.ProviderSessionWorkspaces ??= new Dictionary<string, string>(StringComparer.Ordinal);
+        settings.WorkBuddyDashboardUrl ??= "";
+        settings.UnlockedAccessoryIds ??= ["straw-hat"];
+        if (!settings.UnlockedAccessoryIds.Contains("straw-hat", StringComparer.Ordinal))
+            settings.UnlockedAccessoryIds.Add("straw-hat");
     }
 }
 
@@ -527,14 +587,15 @@ public sealed class FishBookStore
     public bool TryCatchCompletedTurn(string? status, string turnId, out FishRecord? record) =>
         TryCatchCompletedTurn(status, turnId, new FishCatchContext(PondEnvironment.At(DateTime.Now), null, 0, DateTimeOffset.Now), out record);
 
-    public bool TryCatchCompletedTurn(string? status, string turnId, FishCatchContext context, out FishRecord? record)
+    public bool TryCatchCompletedTurn(string? status, string turnId, FishCatchContext context, out FishRecord? record,
+        string? legacyTurnId = null)
     {
         if (!string.Equals(status, "completed", StringComparison.Ordinal) || string.IsNullOrWhiteSpace(turnId))
         {
             record = null;
             return false;
         }
-        return TryCatch(turnId, context, out record);
+        return TryCatch(turnId, context, out record, legacyTurnId);
     }
 
     public bool TryCatch(string turnId, out FishRecord? record) =>
@@ -574,6 +635,9 @@ public sealed class FishBookStore
     }
 
     public bool TryCatch(string turnId, FishCatchContext context, out FishRecord? record)
+        => TryCatch(turnId, context, out record, null);
+
+    private bool TryCatch(string turnId, FishCatchContext context, out FishRecord? record, string? legacyTurnId)
     {
         lock (ProcessGate)
         {
@@ -588,7 +652,9 @@ public sealed class FishBookStore
                 if (!read.CanAppend)
                     throw new FishBookStorageException(read.Status, read.Error ?? "鱼册不可用；为保护原文件，未写入新记录。");
                 var catches = read.Records.ToList();
-                record = catches.FirstOrDefault(x => string.Equals(x.TurnId, turnId, StringComparison.Ordinal));
+                record = catches.FirstOrDefault(x =>
+                    string.Equals(x.TurnId, turnId, StringComparison.Ordinal) ||
+                    (!string.IsNullOrWhiteSpace(legacyTurnId) && string.Equals(x.TurnId, legacyTurnId, StringComparison.Ordinal)));
                 if (record is not null) return false;
 
                 var species = FishCatalog.Choose(context);

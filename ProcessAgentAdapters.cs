@@ -436,7 +436,8 @@ public sealed class DeepSeekHarnessAdapter : IAgentTaskLauncher, IAgentApprovalR
                 var prompt = new AgentApprovalPrompt(requestId, ProviderId,
                     ReadString(root, "toolName") is { Length: > 0 } name ? $"DeepSeek 请求允许工具：{name}" : "DeepSeek 请求一次性操作授权",
                     ReadString(root, "reason") ?? "DeepSeek Harness 请求执行一项受审批保护的操作。",
-                    "仅允许这一次；不保存为会话授权", CanAllowOnce: true, CanReject: true);
+                    "仅允许这一次；不保存为会话授权", CanAllowOnce: true, CanReject: true,
+                    SessionId: _threadKey, TurnId: _activeTurnId);
                 var response = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 _approvalReplies[requestId] = response;
                 ApprovalPromptReceived?.Invoke(prompt);
@@ -836,7 +837,8 @@ public sealed class ClaudeCodeAgentAdapter : IAgentTaskLauncher, IAgentApprovalR
                 var toolInput = request.TryGetProperty("tool_input", out var input) ? input.GetRawText() : "{}";
                 var prompt = new AgentApprovalPrompt(requestId, ProviderId,
                     $"Claude Code 请求权限：{toolName}", toolInput,
-                    "只授权当前这次操作；不会写入 Claude 或 Work Buddy 配置", CanAllowOnce: true, CanReject: true);
+                    "只授权当前这次操作；不会写入 Claude 或 Work Buddy 配置", CanAllowOnce: true, CanReject: true,
+                    SessionId: _threadKey, TurnId: _activeTurnId);
                 var response = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 _approvalReplies[requestId] = response;
                 ApprovalPromptReceived?.Invoke(prompt);

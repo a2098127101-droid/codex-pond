@@ -227,7 +227,7 @@ public sealed class FishingGameWindow : Window
                 _renderer.Stage = FishingStage.Catching;
                 _status.Text = $"釣到了「{fish.FishName}」！收进鱼册了。";
                 _fishCountLabel.Text = $"鱼册 · {_fishBook.ReadAll().Count}";
-                App.Platform?.OnFishCaught(_fishBook.ReadAll().Count, _fishBook.ReadAll().Select(record => record.FishId).Distinct().Count());
+                FishProgressReporter.Report(App.Platform, _fishBook);
                 App.QueueCloudSync(_settings, _settingsStore, _fishBook);
             }
         }

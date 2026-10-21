@@ -47,7 +47,7 @@
             <Grid Background="#DDC191">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="50"/>
-                    <RowDefinition Height="38"/>
+                    <RowDefinition Height="58"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="104"/>
@@ -72,19 +72,26 @@
                     <Button Grid.Column="4" Content="收起" Margin="0,11,7,11" Style="{StaticResource WoodButton}" Click="HideButton_Click"/>
                 </Grid>
 
-                <Grid Grid.Row="1" Margin="9,5,9,3">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="94"/>
-                        <ColumnDefinition Width="58"/>
-                        <ColumnDefinition Width="58"/>
-                        <ColumnDefinition Width="58"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock x:Name="WorkspacePathText" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="2,0,7,0" FontFamily="Microsoft YaHei UI" FontSize="9.5" Foreground="#58432E"/>
-                    <ComboBox x:Name="ProviderComboBox" Grid.Column="1" Margin="0,0,4,0" VerticalContentAlignment="Center" FontFamily="Microsoft YaHei UI" FontSize="9" SelectionChanged="ProviderComboBox_SelectionChanged" AutomationProperties.Name="选择 Agent 提供方"/>
-                    <Button x:Name="WorkspaceButton" Grid.Column="2" Content="目录" Margin="0,0,4,0" Style="{StaticResource WoodButton}" Click="WorkspaceButton_Click"/>
-                    <Button x:Name="WorkBuddyStatusButton" Grid.Column="3" Content="WB 状态" ToolTip="打开或设置 Work Buddy 状态页" Margin="0,0,4,0" Style="{StaticResource WoodButton}" Click="WorkBuddyStatusButton_Click" Visibility="Collapsed"/>
-                    <Button x:Name="NewThreadButton" Grid.Column="4" Content="新会话" Style="{StaticResource WoodButton}" Click="NewThreadButton_Click"/>
+                <Grid Grid.Row="1" Margin="9,3,9,3">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="34"/>
+                        <RowDefinition Height="16"/>
+                    </Grid.RowDefinitions>
+                    <Grid Grid.Row="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="108"/>
+                            <ColumnDefinition Width="58"/>
+                            <ColumnDefinition Width="58"/>
+                            <ColumnDefinition Width="58"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="WorkspacePathText" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="2,0,7,0" FontFamily="Microsoft YaHei UI" FontSize="9.5" Foreground="#58432E"/>
+                        <ComboBox x:Name="ProviderComboBox" Grid.Column="1" Margin="0,0,4,0" VerticalContentAlignment="Center" FontFamily="Microsoft YaHei UI" FontSize="9" SelectionChanged="ProviderComboBox_SelectionChanged" AutomationProperties.Name="选择 Agent 提供方"/>
+                        <Button x:Name="WorkspaceButton" Grid.Column="2" Content="目录" Margin="0,0,4,0" Style="{StaticResource WoodButton}" Click="WorkspaceButton_Click"/>
+                        <Button x:Name="WorkBuddyStatusButton" Grid.Column="3" Content="WB 状态" ToolTip="打开或设置 Work Buddy 状态页" Margin="0,0,4,0" Style="{StaticResource WoodButton}" Click="WorkBuddyStatusButton_Click" Visibility="Collapsed"/>
+                        <Button x:Name="NewThreadButton" Grid.Column="4" Content="新会话" Style="{StaticResource WoodButton}" Click="NewThreadButton_Click"/>
+                    </Grid>
+                    <TextBlock x:Name="ProviderStatusText" Grid.Row="1" Margin="2,0,0,0" FontFamily="Microsoft YaHei UI" FontSize="8.5" Foreground="#665136" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" AutomationProperties.Name="Agent 提供方连接状态" AutomationProperties.LiveSetting="Polite"/>
                 </Grid>
 
                 <ScrollViewer x:Name="MessagesScrollViewer" Grid.Row="2" Margin="9,4,9,6" VerticalScrollBarVisibility="Auto" Background="#CDB282" Padding="8">
@@ -110,7 +117,7 @@
 
                 <Border x:Name="RequestCard" Grid.Row="3" Margin="9,0,9,6" Padding="8" Background="#D1AE72" BorderBrush="#8F6738" BorderThickness="1" Visibility="Collapsed">
                     <StackPanel>
-                        <TextBlock x:Name="RequestTitleText" AutomationProperties.LiveSetting="Assertive" AutomationProperties.Name="Codex 待处理请求" FontFamily="Microsoft YaHei UI" FontWeight="Bold" FontSize="11" Foreground="#382B21" TextWrapping="Wrap"/>
+                        <TextBlock x:Name="RequestTitleText" AutomationProperties.LiveSetting="Assertive" AutomationProperties.Name="待处理请求" FontFamily="Microsoft YaHei UI" FontWeight="Bold" FontSize="11" Foreground="#382B21" TextWrapping="Wrap"/>
                         <TextBlock x:Name="RequestDetailsText" Margin="0,3,0,3" FontFamily="Microsoft YaHei UI" FontSize="9.5" Foreground="#47382A" TextWrapping="Wrap" MaxHeight="55"/>
                         <StackPanel x:Name="RequestFieldsPanel"/>
                         <TextBlock x:Name="RequestNoteText" Margin="0,3,0,0" FontFamily="Microsoft YaHei UI" FontSize="9" Foreground="#674927" TextWrapping="Wrap"/>
@@ -126,7 +133,7 @@
                         <RowDefinition Height="21"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0" Text="给 Codex 留句话" FontFamily="Microsoft YaHei UI" FontSize="10" FontWeight="Bold" Foreground="#42513A" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="PromptLabelText" Grid.Row="0" Text="给 Agent 留句话" FontFamily="Microsoft YaHei UI" FontSize="10" FontWeight="Bold" Foreground="#42513A" VerticalAlignment="Center"/>
                     <TextBox x:Name="PromptTextBox" Grid.Row="1" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" FontSize="11" PreviewKeyDown="PromptTextBox_PreviewKeyDown"/>
                 </Grid>
 
@@ -137,7 +144,7 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock x:Name="StatusText" Text="池塘已准备好" AutomationProperties.Name="任务状态" AutomationProperties.LiveSetting="Polite" FontFamily="Microsoft YaHei UI" FontSize="9" Foreground="#4C533E" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                     <Button x:Name="SubmitButton" Grid.Column="1" Content="抛竿开始" FontWeight="Bold" Style="{StaticResource WoodButton}" Click="SubmitButton_Click"/>
-                    <Button x:Name="CancelTurnButton" Grid.Column="1" Content="停止当前任务" Background="#773E2D" Foreground="#F5D9A7" AutomationProperties.Name="请求 Codex 停止当前任务" Style="{StaticResource WoodButton}" Click="CancelTurnButton_Click" Visibility="Collapsed"/>
+                    <Button x:Name="CancelTurnButton" Grid.Column="1" Content="停止当前任务" Background="#773E2D" Foreground="#F5D9A7" AutomationProperties.Name="请求 Agent 停止当前任务" Style="{StaticResource WoodButton}" Click="CancelTurnButton_Click" Visibility="Collapsed"/>
                 </Grid>
             </Grid>
         </Border>

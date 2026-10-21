@@ -1,0 +1,37 @@
+name: Windows build and smoke validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-smoke:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore packages
+        run: dotnet restore CodexPond.sln -p:NuGetAudit=false
+
+      - name: Build Release
+        run: dotnet build CodexPond.sln --configuration Release --no-restore
+
+      - name: Run Windows smoke validation
+        run: dotnet run --project tests/CodexPond.Smoke/CodexPond.Smoke.csproj --configuration Release --no-build

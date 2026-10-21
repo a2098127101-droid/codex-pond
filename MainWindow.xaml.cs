@@ -14,8 +14,8 @@ namespace CodexPond;
 
 public partial class MainWindow : Window
 {
-    private readonly PondSettingsStore _settingsStore = new();
-    private readonly FishBookStore _fishBook = new();
+    private readonly PondSettingsStore _settingsStore;
+    private readonly FishBookStore _fishBook;
     private readonly FishingStateMachine _fishing = new();
     private readonly FishingActivityTracker _activity = new();
     private readonly PondEventScheduler _eventScheduler = new();
@@ -52,10 +52,12 @@ public partial class MainWindow : Window
     private const int WmNcHitTest = 0x0084;
     private const int HtTransparent = -1;
 
-    public MainWindow()
+    public MainWindow(PondSettings? settings = null, PondSettingsStore? settingsStore = null, FishBookStore? fishBook = null)
     {
         InitializeComponent();
-        _settings = _settingsStore.Load();
+        _settingsStore = settingsStore ?? new PondSettingsStore();
+        _fishBook = fishBook ?? new FishBookStore();
+        _settings = settings ?? _settingsStore.Load();
         ApplyTheme(_settings.Theme, persist: false);
         ApplyAccessories();
         _activity.Enabled = _settings.TrackInputActivity;
@@ -276,6 +278,8 @@ public partial class MainWindow : Window
         }
 
         _taskPanel.SetProviderSelection(_settings.AgentProviderId);
+        if (_turnBusy)
+            _taskPanel.SetProviderStatus($"{AgentProviderCatalog.Label(_settings.AgentProviderId)} 当前任务运行中");
         if (!_taskPanel.IsVisible) _taskPanel.Show();
         _taskPanel.Activate();
         if (!_settings.HasChosenWorkspace || !Directory.Exists(_settings.LastWorkspace))
@@ -526,6 +530,7 @@ public partial class MainWindow : Window
         _currentTurnId = null;
         SaveSettings();
         _taskPanel?.SetStatus($"已切换到 {AgentProviderCatalog.Label(providerId)}；该提供方的权限与停止边界不同");
+        _taskPanel?.SetProviderStatus(AgentProviderCatalog.Available.First(provider => provider.Id == providerId).Readiness);
         _taskPanel?.AddNotice(AgentProviderCatalog.Available.First(provider => provider.Id == providerId).Guidance);
     }
 
@@ -550,6 +555,7 @@ public partial class MainWindow : Window
         var providerId = _settings.AgentProviderId;
         var providerLabel = AgentProviderCatalog.Label(providerId);
         _taskPanel?.SetStatus($"正在连接 {providerLabel}…");
+        _taskPanel?.SetProviderStatus($"正在检查 {providerLabel} 的本机连接…");
         PondStatusText.Text = "鱼线准备中…";
 
         try
@@ -578,7 +584,8 @@ public partial class MainWindow : Window
 
             if (launchSequence != _turnLaunchSequence || !_turnBusy) return;
             var startedTurnId = await launcher.StartTurnAsync(_activeThreadId, prompt, CurrentWorkspace);
-            if (launchSequence != _turnLaunchSequence || _terminalTurnIds.Contains(startedTurnId))
+            if (launchSequence != _turnLaunchSequence ||
+                _terminalTurnIds.Contains(AgentEventIsolation.TurnKey(providerId, startedTurnId)))
             {
                 if (_currentTurnId == startedTurnId) _currentTurnId = null;
                 return;
@@ -586,7 +593,8 @@ public partial class MainWindow : Window
             if (_currentTurnId is not null && !string.Equals(_currentTurnId, startedTurnId, StringComparison.Ordinal))
                 throw new InvalidOperationException("turn/start 回包与已观察到的 turn/started ID 不一致。");
             _currentTurnId = startedTurnId;
-            _taskPanel?.SetStatus($"{providerLabel} 已接手；离散工作事件会带动鱼线");
+            _taskPanel?.SetStatus($"{providerLabel} 连接器已启动，等待实际 turn 开始事件");
+            _taskPanel?.SetProviderStatus($"{providerLabel} 已启动；仍等待 Agent 确认 turn 开始");
             if (_currentTurnId is not null) _taskPanel?.SetBusy(true, _agentLauncher?.Capabilities.CanCancel == true);
             if (_interruptRequested && _currentTurnId is not null)
             {
@@ -606,6 +614,7 @@ public partial class MainWindow : Window
             _taskPanel?.SetBusy(false, false);
             _taskPanel?.FinishAssistantMessage("这次没有启动成功。");
             _taskPanel?.SetStatus("没有抛竿成功");
+            _taskPanel?.SetProviderStatus($"{providerLabel} 启动失败；请查看连接检查提示");
             _taskPanel?.AddNotice($"无法启动 {providerLabel}：{ex.Message}");
             _taskPanel?.AddNotice(GetProviderSetupGuidance(providerId));
             SetFishingStage(FishingStage.Retracting);
@@ -637,68 +646,59 @@ public partial class MainWindow : Window
             _ => new CodexAppServerAdapter()
         };
         _agentLaunchers[providerId] = launcher;
-        launcher.AgentEventReceived += OnAgentEvent;
+        launcher.AgentEventReceived += agentEvent => OnAgentEvent(launcher, agentEvent);
         if (launcher is CodexAppServerAdapter codex)
         {
             _adapter = codex;
-            codex.RequestReceived += OnServerRequest;
+            codex.RequestReceived += request => OnServerRequest(codex, request);
         }
         if (launcher is IAgentApprovalResponder approvalResponder)
-            approvalResponder.ApprovalPromptReceived += OnAgentApprovalPrompt;
+            approvalResponder.ApprovalPromptReceived += prompt => OnAgentApprovalPrompt(launcher, prompt);
         if (launcher is IAgentSessionState sessionState)
-            sessionState.ResumableSessionResolved += OnResumableSessionResolved;
+            sessionState.ResumableSessionResolved += (threadKey, sessionId) => OnResumableSessionResolved(launcher, threadKey, sessionId);
         return launcher;
     }
 
-    private void OnResumableSessionResolved(string threadKey, string sessionId)
+    private void OnResumableSessionResolved(IAgentTaskLauncher source, string threadKey, string sessionId)
     {
         if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished) return;
         try
         {
             Dispatcher.BeginInvoke(() =>
             {
-                if (string.IsNullOrWhiteSpace(_agentLauncher?.ProviderId)) return;
-                _settings.ProviderSessions[_agentLauncher.ProviderId] = sessionId;
-                _settings.ProviderSessionWorkspaces[_agentLauncher.ProviderId] = CurrentWorkspace;
+                if (!ReferenceEquals(source, _agentLauncher) || string.IsNullOrWhiteSpace(source.ProviderId) ||
+                    !string.Equals(threadKey, _activeThreadId, StringComparison.Ordinal)) return;
+                _settings.ProviderSessions[source.ProviderId] = sessionId;
+                _settings.ProviderSessionWorkspaces[source.ProviderId] = CurrentWorkspace;
                 SaveSettings();
             });
         }
         catch (InvalidOperationException) { }
     }
 
-    private void OnAgentEvent(AgentEvent agentEvent)
+    private void OnAgentEvent(IAgentTaskLauncher source, AgentEvent agentEvent)
     {
         if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished) return;
-        try { Dispatcher.BeginInvoke(() => HandleAgentEvent(agentEvent)); }
+        try { Dispatcher.BeginInvoke(() => HandleAgentEvent(source, agentEvent)); }
         catch (InvalidOperationException) { }
     }
 
-    private void HandleAgentEvent(AgentEvent agentEvent)
+    private void HandleAgentEvent(IAgentTaskLauncher source, AgentEvent agentEvent)
     {
+        if (!AgentEventIsolation.IsCurrentTurnEvent(source, _agentLauncher, agentEvent, _turnBusy, _activeThreadId, _currentTurnId, _terminalTurnIds)) return;
         if (agentEvent.Kind == AgentEventKind.Disconnected)
         {
-            HandleAgentDisconnected(agentEvent.Text ?? "Agent 连接中断。");
+            HandleAgentDisconnected(agentEvent);
             return;
         }
-
-        if (!string.IsNullOrWhiteSpace(agentEvent.SessionId) &&
-            !string.Equals(agentEvent.SessionId, _activeThreadId, StringComparison.Ordinal)) return;
-
-        if (agentEvent.Kind == AgentEventKind.Started)
-        {
-            if (string.IsNullOrWhiteSpace(agentEvent.TurnId)) return;
-            if (!string.IsNullOrWhiteSpace(_currentTurnId) && !string.IsNullOrWhiteSpace(agentEvent.TurnId) &&
-                !string.Equals(_currentTurnId, agentEvent.TurnId, StringComparison.Ordinal)) return;
-        }
-        else if (!string.IsNullOrWhiteSpace(_currentTurnId) &&
-                 (string.IsNullOrWhiteSpace(agentEvent.TurnId) || !string.Equals(_currentTurnId, agentEvent.TurnId, StringComparison.Ordinal))) return;
 
         if (agentEvent.Kind == AgentEventKind.Completed && !string.Equals(agentEvent.Status, "completed", StringComparison.Ordinal))
             agentEvent = agentEvent with { Kind = AgentEventKind.Failed };
 
         if (agentEvent.Kind is AgentEventKind.Completed or AgentEventKind.Failed or AgentEventKind.Cancelled)
         {
-            if (!string.IsNullOrWhiteSpace(agentEvent.TurnId) && _terminalTurnIds.Contains(agentEvent.TurnId)) return;
+            if (!string.IsNullOrWhiteSpace(agentEvent.TurnId) &&
+                _terminalTurnIds.Contains(AgentEventIsolation.TurnKey(agentEvent.ProviderId, agentEvent.TurnId))) return;
             if (!string.IsNullOrWhiteSpace(_currentTurnId) && !string.IsNullOrWhiteSpace(agentEvent.TurnId) &&
                 !string.Equals(_currentTurnId, agentEvent.TurnId, StringComparison.Ordinal)) return;
         }
@@ -713,6 +713,7 @@ public partial class MainWindow : Window
             SetFishingStage(_fishing.Stage);
             _taskPanel?.SetBusy(true, _agentLauncher?.Capabilities.CanCancel == true && !string.IsNullOrWhiteSpace(_currentTurnId));
             _taskPanel?.SetStatus($"{AgentProviderCatalog.Label(agentEvent.ProviderId)} turn 已开始，鱼钩落水");
+            _taskPanel?.SetProviderStatus($"{AgentProviderCatalog.Label(agentEvent.ProviderId)} 已报告 turn 开始");
             if (_interruptRequested && _currentTurnId is not null) InterruptTurn();
             return;
         }
@@ -749,7 +750,8 @@ public partial class MainWindow : Window
         if (agentEvent.Kind == AgentEventKind.ApprovalRequired) return;
         if (agentEvent.Kind is not (AgentEventKind.Completed or AgentEventKind.Failed or AgentEventKind.Cancelled)) return;
         _currentTurnId = agentEvent.TurnId ?? _currentTurnId;
-        if (!string.IsNullOrWhiteSpace(_currentTurnId)) _terminalTurnIds.Add(_currentTurnId);
+        if (!string.IsNullOrWhiteSpace(_currentTurnId))
+            _terminalTurnIds.Add(AgentEventIsolation.TurnKey(agentEvent.ProviderId, _currentTurnId));
         _turnBusy = false;
         _interruptRequested = false;
         _stopRequestSent = false;
@@ -759,6 +761,7 @@ public partial class MainWindow : Window
         _taskPanel?.FinishAssistantMessage(agentEvent.Text);
         _taskPanel?.ClearRequest();
         _pendingRequests.Clear();
+        _taskPanel?.SetProviderStatus($"{AgentProviderCatalog.Label(agentEvent.ProviderId)} 本轮已结束；下次提交时重新检查连接");
 
         if (agentEvent.Kind == AgentEventKind.Completed)
         {
@@ -779,7 +782,8 @@ public partial class MainWindow : Window
                      (workBuddyEvidence.DurableWorkflowObserved && !workBuddyEvidence.VerifiedWorkflowCompletion)))
                 {
                     var unverifiedTurnId = _currentTurnId;
-                    if (!string.IsNullOrWhiteSpace(unverifiedTurnId)) _terminalTurnIds.Add(unverifiedTurnId);
+                    if (!string.IsNullOrWhiteSpace(unverifiedTurnId))
+                        _terminalTurnIds.Add(AgentEventIsolation.TurnKey(agentEvent.ProviderId, unverifiedTurnId));
                     _turnBusy = false;
                     _interruptRequested = false;
                     _stopRequestSent = false;
@@ -806,13 +810,15 @@ public partial class MainWindow : Window
                     _currentTurnId = null;
                     return;
                 }
-                var completedTurnId = _currentTurnId;
+                var rawCompletedTurnId = _currentTurnId;
+                var completedTurnId = AgentEventIsolation.TurnKey(agentEvent.ProviderId, rawCompletedTurnId);
                 try
                 {
                     var environment = PondEnvironment.At(DateTime.Now);
                     var activeEvent = _eventScheduler.Update(DateTimeOffset.Now, IsVisible, environment.Season);
                     var catchContext = new FishCatchContext(environment, activeEvent, _activity.Score, DateTimeOffset.Now);
-                    var added = _fishBook.TryCatchCompletedTurn("completed", completedTurnId, catchContext, out var fish);
+                    var added = _fishBook.TryCatchCompletedTurn("completed", completedTurnId, catchContext, out var fish,
+                        legacyTurnId: rawCompletedTurnId);
                     if (added && fish is not null) PondArt.CatchFishId = fish.FishId;
                     _fishing.Apply(CodexSignal.TurnSucceeded);
                     SetFishingStage(_fishing.Stage);
@@ -829,6 +835,7 @@ public partial class MainWindow : Window
                         _taskPanel?.SetStatus("收到重复完成事件，鱼册没有重复添加");
                     }
                     UpdateFishCount();
+                    if (added) FishProgressReporter.Report(App.Platform, _fishBook);
                     App.QueueCloudSync(_settings, _settingsStore, _fishBook);
                     _stageDeadline = DateTime.Now.AddSeconds(2.8);
                     _currentTurnId = null;
@@ -864,14 +871,19 @@ public partial class MainWindow : Window
         _currentTurnId = null;
     }
 
-    private void OnServerRequest(CodexApprovalRequest request)
+    private void OnServerRequest(CodexAppServerAdapter source, CodexApprovalRequest request)
     {
         Dispatcher.BeginInvoke(() =>
         {
+            if (!ReferenceEquals(source, _agentLauncher) || !_turnBusy)
+            {
+                _ = RejectStaleRequestAsync(source, request);
+                return;
+            }
             if ((!string.IsNullOrWhiteSpace(request.SessionId) && request.SessionId != _activeThreadId) ||
                 (!string.IsNullOrWhiteSpace(request.TurnId) && !string.IsNullOrWhiteSpace(_currentTurnId) && request.TurnId != _currentTurnId))
             {
-                _ = RejectStaleRequestAsync(request);
+                _ = RejectStaleRequestAsync(source, request);
                 return;
             }
             _pendingRequests.Enqueue(request);
@@ -886,14 +898,17 @@ public partial class MainWindow : Window
         });
     }
 
-    private void OnAgentApprovalPrompt(AgentApprovalPrompt prompt)
+    private void OnAgentApprovalPrompt(IAgentTaskLauncher source, AgentApprovalPrompt prompt)
     {
         if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished) return;
         try
         {
             Dispatcher.BeginInvoke(() =>
             {
-                if (!_turnBusy || !string.Equals(prompt.ProviderId, _agentLauncher?.ProviderId, StringComparison.Ordinal)) return;
+                if (!ReferenceEquals(source, _agentLauncher) || !_turnBusy ||
+                    !string.Equals(prompt.ProviderId, source.ProviderId, StringComparison.Ordinal) ||
+                    (!string.IsNullOrWhiteSpace(prompt.SessionId) && prompt.SessionId != _activeThreadId) ||
+                    (!string.IsNullOrWhiteSpace(prompt.TurnId) && prompt.TurnId != _currentTurnId)) return;
                 _pendingAgentApproval = prompt;
                 _fishing.Apply(CodexSignal.ApprovalRequested);
                 SetFishingStage(_fishing.Stage);
@@ -925,10 +940,9 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task RejectStaleRequestAsync(CodexApprovalRequest request)
+    private async Task RejectStaleRequestAsync(CodexAppServerAdapter source, CodexApprovalRequest request)
     {
-        if (_adapter is null) return;
-        try { await _adapter.RejectUnsupportedRequestAsync(request); }
+        try { await source.RejectUnsupportedRequestAsync(request); }
         catch (Exception ex) { _taskPanel?.AddNotice($"旧请求无法安全回应：{ex.Message}"); }
     }
 
@@ -983,9 +997,12 @@ public partial class MainWindow : Window
         if (_turnBusy) _taskPanel?.SetBusy(true, _agentLauncher?.Capabilities.CanCancel == true && !string.IsNullOrWhiteSpace(_currentTurnId));
     }
 
-    private void HandleAgentDisconnected(string message)
+    private void HandleAgentDisconnected(AgentEvent agentEvent)
     {
+        var providerLabel = AgentProviderCatalog.Label(agentEvent.ProviderId);
         var hadActiveTurn = _turnBusy;
+        if (!string.IsNullOrWhiteSpace(_currentTurnId))
+            _terminalTurnIds.Add(AgentEventIsolation.TurnKey(agentEvent.ProviderId, _currentTurnId));
         _turnBusy = false;
         _inputMonitor.Stop();
         _activity.EndTurn();
@@ -1000,9 +1017,10 @@ public partial class MainWindow : Window
         if (hadActiveTurn) _taskPanel?.FinishAssistantMessage("连接中断前，没有收到完整答复。");
         _fishing.Apply(CodexSignal.Disconnected);
         SetFishingStage(_fishing.Stage);
-        PondStatusText.Text = "Codex 连接中断";
-        _taskPanel?.SetStatus($"{AgentProviderCatalog.Label(_agentLauncher?.ProviderId)} 连接中断");
-        if (hadActiveTurn) _taskPanel?.AddNotice($"连接中断，没有记录鱼获。原因：{message}");
+        PondStatusText.Text = $"{providerLabel} 连接中断";
+        _taskPanel?.SetStatus($"{providerLabel} 连接中断");
+        _taskPanel?.SetProviderStatus($"{providerLabel} 连接中断；没有收到当前 turn 的成功终态");
+        if (hadActiveTurn) _taskPanel?.AddNotice($"{providerLabel} 连接中断，没有记录鱼获。原因：{agentEvent.Text ?? "未提供原因"}");
         _stageDeadline = DateTime.Now.AddSeconds(4);
     }
 
@@ -1057,7 +1075,7 @@ public partial class MainWindow : Window
                 FishingStage.WaitingForApproval => "鱼线停住，等待你的决定",
                 FishingStage.Catching => "鱼上钩了！",
                 FishingStage.Retracting => "任务未完成，鱼线收回",
-                FishingStage.ConnectionLost => "Codex 连接中断",
+                FishingStage.ConnectionLost => $"{AgentProviderCatalog.Label(_agentLauncher?.ProviderId)} 连接中断",
                 _ => "池塘安静，鱼线待命"
             };
         }
