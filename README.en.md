@@ -27,6 +27,10 @@
 
 The preview package is a self-contained Windows x64 build. The executable is currently unsigned, so Windows may display a publisher or SmartScreen warning. Review the source and the published SHA-256 checksum before running it.
 
+### Source-level “Cyber Buddha” mark
+
+Run `CodexPond.exe --cyber-buddha-stamp` to view the source mark ID, version, and SHA-256 fingerprint of the current executable. Compare it with the checksum manifest in the [official GitHub Releases](https://github.com/a2098127101-droid/codex-pond/releases). The currently published preview package does not include this option; it takes effect with a build that contains this change. The mark is not drawn in the pond. A locally displayed hash is not a digital signature and cannot prevent a binary from being modified.
+
 ## Provider and Steam status
 
 The Codex, DeepSeek Harness, and Work Buddy connector implementations are included. Automated smoke coverage uses fake CLI/App Server/MCP event streams. Real provider end-to-end acceptance is still pending and requires the user's own CLI, sign-in, MCP setup, and approvals. No provider credentials are included.

@@ -32,6 +32,20 @@ public partial class App : Application
             return;
         }
 
+        if (CyberBuddhaSeal.IsStampRequest(e.Args))
+        {
+            try
+            {
+                MessageBox.Show(CyberBuddhaSeal.DescribeRunningBuild(), "赛博大佛 · 构建印记", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"无法读取当前构建指纹：{ex.Message}\n\n印记编号：{CyberBuddhaSeal.MarkId}", "赛博大佛 · 构建印记", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            Shutdown();
+            return;
+        }
+
         _steamLaunched = e.Args.Any(argument => string.Equals(argument, "--steam", StringComparison.OrdinalIgnoreCase)) ||
             !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("SteamAppId"));
         _settingsStore = new PondSettingsStore();

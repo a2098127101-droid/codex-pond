@@ -27,6 +27,10 @@
 
 预览包是 Windows x64 自包含构建。目前的可执行文件尚未签名，Windows 可能显示发布者或 SmartScreen 警告。运行前请检查源码并核对已发布的 SHA-256 校验值。
 
+### 源码级“赛博大佛”印记
+
+运行 `CodexPond.exe --cyber-buddha-stamp` 可查看源码印记编号、版本和当前可执行文件的 SHA-256 指纹。请将其与[官方 GitHub Release 的校验清单](https://github.com/a2098127101-droid/codex-pond/releases)对照。当前公开预览包尚未包含此参数；该功能从包含本次改动的构建开始生效。印记不显示在池塘场景中；本地哈希本身不是数字签名，也不能阻止二进制文件被修改。
+
 ## Agent 与 Steam 状态
 
 仓库包含 Codex、DeepSeek Harness 和 Work Buddy 连接器实现。自动化冒烟验证使用模拟 CLI、App Server 和 MCP 事件流。真实提供方的端到端验收仍待完成，需要用户自行配置 CLI、登录、MCP 和审批；仓库不包含提供方凭据。

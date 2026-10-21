@@ -1,0 +1,52 @@
+using System;
+using System.IO;
+using System.Reflection;
+using System.Security.Cryptography;
+
+namespace CodexPond;
+
+/// <summary>
+/// Code-level project provenance mark. The runtime hash identifies the current binary;
+/// compare it with the SHA-256 manifest published in the official GitHub release.
+/// The marker and hash are not a digital signature and do not prevent tampering.
+/// </summary>
+public static class CyberBuddhaSeal
+{
+    public const string MarkId = "CODEX-POND-CYBER-BUDDHA-01";
+    public const string SourceMark = """
+             _._
+           _(   )_
+          (  .-.  )
+           `|_|_'
+         .-`| |`-.
+        /___|_|___\
+          CODEX POND
+        """;
+
+    public static bool IsStampRequest(string[] args) =>
+        Array.Exists(args, argument => string.Equals(argument, "--cyber-buddha-stamp", StringComparison.OrdinalIgnoreCase));
+
+    public static string DescribeRunningBuild()
+    {
+        var assembly = Assembly.GetEntryAssembly() ?? typeof(CyberBuddhaSeal).Assembly;
+        var version = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+            ?? assembly.GetName().Version?.ToString()
+            ?? "unknown";
+        var executablePath = Environment.ProcessPath;
+        var appHostPath = Path.Combine(AppContext.BaseDirectory, "CodexPond.exe");
+        if (File.Exists(appHostPath) && !string.Equals(Path.GetFileName(executablePath), "CodexPond.exe", StringComparison.OrdinalIgnoreCase))
+            executablePath = appHostPath;
+        if (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath))
+            executablePath = assembly.Location;
+
+        var fingerprint = "unavailable";
+        if (!string.IsNullOrWhiteSpace(executablePath) && File.Exists(executablePath))
+        {
+            using var stream = File.OpenRead(executablePath);
+            fingerprint = Convert.ToHexString(SHA256.HashData(stream));
+        }
+
+        var targetName = string.IsNullOrWhiteSpace(executablePath) ? "unknown" : Path.GetFileName(executablePath);
+        return $"{SourceMark}\n\n{MarkId}\nVersion: {version}\nFile: {targetName}\nSHA-256: {fingerprint}\n\n此指纹只用于与 Codex Pond 官方 GitHub Release 中的 SHA256SUMS.txt 对照；单独显示的哈希不是数字签名，也不能单独证明文件来源。";
+    }
+}
