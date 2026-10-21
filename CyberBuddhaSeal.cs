@@ -13,14 +13,48 @@ namespace CodexPond;
 public static class CyberBuddhaSeal
 {
     public const string MarkId = "CODEX-POND-CYBER-BUDDHA-01";
+    // This source-level ASCII easter egg follows the user's code-photo reference.
+    // It is a joke, not a claim that software can be guaranteed bug-free.
     public const string SourceMark = """
-             _._
-           _(   )_
-          (  .-.  )
-           `|_|_'
-         .-`| |`-.
-        /___|_|___\
-          CODEX POND
+                                _..-------.._
+                            .-''  _     _   ``-.
+                          .'     (_)   (_)      `.
+                         /     .-........-.       \
+                        /     /  .------.  \       \
+                       ;     |  /  .--.  \  |       ;
+                       |     | |  (o  o) | |       |
+                       |     | |    /\   | |       |
+                       ;      \ \  `--' / /       ;
+                        \      `-.____.-'        /
+                         `-.       ||       _.-'
+                            `--..__||__..--'
+                         ________ /  \ ________
+                     _.-'        / /\ \        `-._
+                   .'    .------' /  \ `------.    `.
+                  /    .'   .----'    `----.   `.    \
+                 ;    /   .'    .------.    `.   \    ;
+                 |   |   /     /  ____  \     \   |   |
+                 |   |  |     |  / __ \  |     |  |   |
+                 |   |  |     | | |  | | |     |  |   |
+                  \  |  |     | | |__| | |     |  |  /
+                   \  \  \     \ \____/ /     /  / /
+                    `._`. `-.    `----'    .-' .'_.'
+                       `-._ `-..________..-' _.-'
+                            `--.________.--'
+                        __/|  /|  /  \  |\  |\__
+                    _.-'   | / | /    \ | \ |   `-._
+                   /_______|/___/______\___\|_______\
+                       /    /   /      \   \    \
+                  ____/____/___/________\___\____\____
+                 /_____________________________________\
+                    \    _.-'  /    \  `-._    /
+                     `--'     /      \     `--'
+                            _/  /\    \ \_
+                           /___/  \____\__\
+                              /____\
+
+                         电子佛祖
+                      保佑永无 BUG
         """;
 
     public static bool IsStampRequest(string[] args) =>
@@ -47,6 +81,6 @@ public static class CyberBuddhaSeal
         }
 
         var targetName = string.IsNullOrWhiteSpace(executablePath) ? "unknown" : Path.GetFileName(executablePath);
-        return $"{SourceMark}\n\n{MarkId}\nVersion: {version}\nFile: {targetName}\nSHA-256: {fingerprint}\n\n仅将此指纹与对应同版本的 Codex Pond 官方 GitHub Release 校验清单对照；本地源码构建与发行版哈希通常不同。单独显示的哈希不是数字签名，也不能单独证明文件来源。";
+        return $"{SourceMark}\n\n{MarkId}\nVersion: {version}\nFile: {targetName}\nSHA-256: {fingerprint}\n\n此处是源码级玩笑彩蛋，不构成无 Bug 保证。仅将指纹与同版本官方 Release 校验清单对照；本地源码构建与发行版哈希通常不同。哈希不是数字签名，也不能单独证明文件来源。";
     }
 }

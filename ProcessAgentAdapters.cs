@@ -206,8 +206,8 @@ public sealed class DeepSeekHarnessAdapter : IAgentTaskLauncher, IAgentApprovalR
         Interlocked.Exchange(ref _cancelRequested, 0);
         _runCancellation?.Dispose();
         _runCancellation = new CancellationTokenSource();
-        _pipeName = $"CodexPond.Dsh.{Guid.NewGuid():N}";
-        var readyPipeName = $"CodexPond.Dsh.Ready.{Guid.NewGuid():N}";
+        _pipeName = AgentPipeAddress.Create("dsh");
+        var readyPipeName = AgentPipeAddress.Create("ready");
         var started = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         var bridgeReady = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _approvalBridgeReadyCompletion = bridgeReady;
@@ -589,7 +589,7 @@ public sealed class ClaudeCodeAgentAdapter : IAgentTaskLauncher, IAgentApprovalR
         Interlocked.Exchange(ref _cancelRequested, 0);
         _runCancellation?.Dispose();
         _runCancellation = new CancellationTokenSource();
-        _pipeName = $"CodexPond.Claude.{Guid.NewGuid():N}";
+        _pipeName = AgentPipeAddress.Create("claude");
         var startInfo = CreateStartInfo(cwd, _sessionId, prompt, _pipeName);
         _process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
         try

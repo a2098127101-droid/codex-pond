@@ -1,4 +1,5 @@
 using System.Windows.Media.Imaging;
+using System.Windows.Media;
 
 namespace CodexPond;
 
@@ -7,6 +8,7 @@ public static class PondAssets
 {
     private static readonly Dictionary<PondTheme, BitmapImage> Themes = new();
     private static readonly Dictionary<string, BitmapImage> Fish = new(StringComparer.Ordinal);
+    private static readonly Dictionary<string, BitmapSource> Silhouettes = new(StringComparer.Ordinal);
     private static readonly object Gate = new();
 
     public static BitmapImage Theme(PondTheme theme)
@@ -42,6 +44,35 @@ public static class PondAssets
                 Fish[fishId] = image;
             }
             return image;
+        }
+    }
+
+    public static BitmapSource? FishSilhouette(string? fishId)
+    {
+        var source = FishSprite(fishId);
+        if (source is null || string.IsNullOrWhiteSpace(fishId)) return null;
+        lock (Gate)
+        {
+            if (Silhouettes.TryGetValue(fishId, out var cached)) return cached;
+            var converted = new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+            var stride = converted.PixelWidth * 4;
+            var pixels = new byte[stride * converted.PixelHeight];
+            converted.CopyPixels(pixels, stride, 0);
+            const byte blue = 62;
+            const byte green = 82;
+            const byte red = 60;
+            for (var index = 0; index < pixels.Length; index += 4)
+            {
+                if (pixels[index + 3] == 0) continue;
+                pixels[index] = blue;
+                pixels[index + 1] = green;
+                pixels[index + 2] = red;
+            }
+            var silhouette = BitmapSource.Create(converted.PixelWidth, converted.PixelHeight, 96, 96,
+                PixelFormats.Bgra32, null, pixels, stride);
+            silhouette.Freeze();
+            Silhouettes[fishId] = silhouette;
+            return silhouette;
         }
     }
 

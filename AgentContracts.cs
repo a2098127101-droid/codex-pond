@@ -98,6 +98,17 @@ public static class AgentProviderIds
     public const string WorkBuddy = "work-buddy";
 }
 
+/// <summary>Creates local IPC names that work with Windows named pipes and Unix-domain-socket-backed .NET pipes.</summary>
+public static class AgentPipeAddress
+{
+    public static string Create(string purpose)
+    {
+        var id = Guid.NewGuid().ToString("N");
+        if (OperatingSystem.IsWindows()) return $"CodexPond.{purpose}.{id}";
+        return Path.Combine(Path.GetTempPath(), $"cp.{purpose}.{id}");
+    }
+}
+
 public sealed record AgentProviderOption(string Id, string Label, string Guidance, string Readiness);
 
 public static class AgentProviderCatalog

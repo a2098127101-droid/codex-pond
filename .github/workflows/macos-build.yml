@@ -1,0 +1,53 @@
+name: macOS Avalonia build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-macos-app:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [osx-arm64, osx-x64]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore macOS client
+        run: dotnet restore macos/CodexPond.Mac/CodexPond.Mac.csproj --runtime ${{ matrix.rid }} -p:NuGetAudit=false
+
+      - name: Publish self-contained app bundle
+        run: bash macos/build-macos.sh ${{ matrix.rid }}
+
+      - name: Zip app bundle
+        shell: bash
+        run: |
+          APP_PATH="$(find artifacts/macos -type d -name 'Codex Pond.app' -print -quit)"
+          test -n "$APP_PATH"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "artifacts/macos/CodexPond-${{ matrix.rid }}.zip"
+
+      - name: Upload unsigned development build
+        uses: actions/upload-artifact@v4
+        with:
+          name: CodexPond-${{ matrix.rid }}
+          path: artifacts/macos/CodexPond-${{ matrix.rid }}.zip
+          if-no-files-found: error
+          retention-days: 30

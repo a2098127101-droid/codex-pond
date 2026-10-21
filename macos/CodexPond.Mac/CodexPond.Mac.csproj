@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>CodexPond.Mac</AssemblyName>
+    <RootNamespace>CodexPond.Mac</RootNamespace>
+    <ApplicationTitle>Codex Pond</ApplicationTitle>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\shared\CodexPond.Core\CodexPond.Core.csproj" />
+    <Content Include="..\..\Assets\Fish\*.png" Link="Assets\Fish\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\Assets\Themes\*.png" Link="Assets\Themes\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\DshBridge\cordis.patch.yml" Link="DshBridge\cordis.patch.yml" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\DshBridge\approval-bridge.mjs" Link="DshBridge\approval-bridge.mjs" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

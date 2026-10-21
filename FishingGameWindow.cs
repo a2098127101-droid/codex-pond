@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -23,11 +24,15 @@ public sealed class FishingGameWindow : Window
     private readonly TextBlock _environmentLabel;
     private readonly TextBlock _fishCountLabel;
     private readonly Button _castButton;
+    private readonly ProgressBar _tensionBar;
+    private readonly TextBlock _tensionLabel;
     private FishBookWindow? _fishBookWindow;
     private AppearanceWindow? _appearanceWindow;
     private CastState _castState;
-    private DateTimeOffset _biteAt;
     private DateTimeOffset _nextBiteAt;
+    private DateTimeOffset _challengeTick;
+    private FishingChallenge? _challenge;
+    private bool _reelHeld;
     private bool _closedForModeSwitch;
 
     public FishingGameWindow(PondSettings settings, PondSettingsStore settingsStore, FishBookStore fishBook, bool launchedFromSteam = false)
@@ -64,6 +69,19 @@ public sealed class FishingGameWindow : Window
         var headerActions = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         headerActions.Children.Add(MakeButton("鱼册", (_, _) => OpenFishBook()));
         headerActions.Children.Add(MakeButton("外观", (_, _) => OpenAppearance()));
+        var gentleMode = new CheckBox
+        {
+            Content = "宽松辅助",
+            IsChecked = _settings.FishingAssistMode == FishingAssistMode.Gentle,
+            Margin = new Thickness(7, 0, 5, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = Brush("#E8D7A4"),
+            FontSize = 10,
+            ToolTip = "放宽鱼线安全区和反应要求；不会自动替你收线。"
+        };
+        gentleMode.Checked += (_, _) => SetAssistMode(FishingAssistMode.Gentle);
+        gentleMode.Unchecked += (_, _) => SetAssistMode(FishingAssistMode.Standard);
+        headerActions.Children.Add(gentleMode);
         headerActions.Children.Add(MakeButton("Agent 池塘", (_, _) => RequestAgentMode()));
         Grid.SetColumn(headerActions, 1);
         header.Children.Add(headerActions);
@@ -95,7 +113,7 @@ public sealed class FishingGameWindow : Window
         var footer = new Grid { Margin = new Thickness(4, 8, 4, 0) };
         footer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        footer.RowDefinitions.Add(new RowDefinition { Height = new GridLength(28) });
+        footer.RowDefinitions.Add(new RowDefinition { Height = new GridLength(25) });
         footer.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         _status = new TextBlock { Text = "池水安静。准备好时抛竿。", Foreground = Brush("#F1D9A4"), FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
         footer.Children.Add(_status);
@@ -106,18 +124,31 @@ public sealed class FishingGameWindow : Window
         _castButton.FontSize = 14;
         _castButton.FontWeight = FontWeights.Bold;
         _castButton.MinWidth = 150;
-        _castButton.Height = 44;
+        _castButton.Height = 38;
         _castButton.Background = Brush("#D8C18F");
+        _castButton.PreviewMouseLeftButtonDown += (_, _) =>
+        {
+            if (_castState == CastState.Bite) _reelHeld = true;
+        };
+        _castButton.PreviewMouseLeftButtonUp += (_, _) => _reelHeld = false;
+        _castButton.LostMouseCapture += (_, _) => _reelHeld = false;
         Grid.SetRow(_castButton, 1);
-        Grid.SetColumnSpan(_castButton, 2);
+        Grid.SetColumn(_castButton, 1);
         footer.Children.Add(_castButton);
+        var tensionPanel = new Grid { Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center };
+        _tensionBar = new ProgressBar { Minimum = 0, Maximum = 1, Value = .52, Height = 13, Foreground = Brush("#86B29A"), Background = Brush("#263C35"), Visibility = Visibility.Collapsed };
+        _tensionLabel = new TextBlock { Text = "咬钩后按住按钮或空格调整鱼线张力", Foreground = Brush("#D5DDBD"), FontSize = 9, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
+        tensionPanel.Children.Add(_tensionBar);
+        tensionPanel.Children.Add(_tensionLabel);
+        Grid.SetRow(tensionPanel, 1);
+        footer.Children.Add(tensionPanel);
         Grid.SetRow(footer, 2);
         root.Children.Add(footer);
 
         ApplyTheme(_settings.Theme);
         UpdateEnvironment(DateTimeOffset.Now);
         RefreshFishCount();
-        _timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(250) };
+        _timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(120) };
         _timer.Tick += Timer_Tick;
         _timer.Start();
         IsVisibleChanged += (_, _) =>
@@ -126,6 +157,8 @@ public sealed class FishingGameWindow : Window
             else _timer.Stop();
         };
         Closed += (_, _) => _timer.Stop();
+        PreviewKeyDown += Window_PreviewKeyDown;
+        PreviewKeyUp += Window_PreviewKeyUp;
         Closing += (_, _) =>
         {
             _settings.LastMode = _closedForModeSwitch ? PondMode.AgentPond : PondMode.IndependentFishing;
@@ -182,7 +215,7 @@ public sealed class FishingGameWindow : Window
         _renderer.Environment = environment;
         _renderer.ActiveEvent = activeEvent;
         _environmentLabel.Text = $"{SeasonLabel(environment.Season)} · {PhaseLabel(environment.Phase)} · {WeatherLabel(environment.Weather)}" +
-            (activeEvent is null ? "" : $" · {activeEvent.Name}");
+            (activeEvent is null ? "" : $" · {activeEvent.Name}" + (activeEvent.Definition.LimitedFishId is null ? "" : " · 图鉴有事件鱼线索"));
         _renderer.Tick(now);
         _renderer.InvalidateVisual();
     }
@@ -214,6 +247,11 @@ public sealed class FishingGameWindow : Window
             return;
         }
 
+        if (_castState == CastState.Bite) return;
+    }
+
+    private void CatchFish(DateTimeOffset now)
+    {
         var environment = PondEnvironment.At(now.LocalDateTime);
         var activeEvent = _eventScheduler.Update(now, IsVisible, environment.Season);
         var context = new FishCatchContext(environment, activeEvent, 0, now);
@@ -237,6 +275,9 @@ public sealed class FishingGameWindow : Window
             MessageBox.Show(this, ex.Message, "鱼册无法写入", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         _castState = CastState.Idle;
+        _challenge = null;
+        _reelHeld = false;
+        _tensionBar.Visibility = Visibility.Collapsed;
         _castButton.Content = "抛竿";
     }
 
@@ -247,19 +288,61 @@ public sealed class FishingGameWindow : Window
         if (_castState == CastState.Waiting && now >= _nextBiteAt)
         {
             _castState = CastState.Bite;
-            _biteAt = now;
-            _status.Text = "咬钩了！快按「收线」";
-            _castButton.Content = "收线！";
+            _challenge = new FishingChallenge(_settings.FishingAssistMode);
+            _challengeTick = now;
+            _reelHeld = false;
+            _tensionBar.Value = _challenge.Tension;
+            _tensionBar.Visibility = Visibility.Visible;
+            _tensionLabel.Text = "张力稳住时会逐渐拉近鱼；按住收线或空格，松开则放线。";
+            _status.Text = "咬钩了！控制鱼线张力，把安全区里的鱼慢慢拉近。";
+            _castButton.Content = "按住收线";
             _renderer.Stage = FishingStage.Fighting;
         }
-        else if (_castState == CastState.Bite && now - _biteAt > TimeSpan.FromSeconds(5))
+        if (_castState == CastState.Bite && _challenge is not null)
         {
-            _castState = CastState.Idle;
-            _castButton.Content = "抛竿";
-            _status.Text = "鱼儿游开了。再等下一次咬钩吧。";
-            _renderer.Stage = FishingStage.Retracting;
+            _challenge.Advance(now - _challengeTick, _reelHeld);
+            _challengeTick = now;
+            _tensionBar.Value = _challenge.Tension;
+            _tensionLabel.Text = $"{_challenge.TensionLabel} · {_challenge.Mode switch { FishingAssistMode.Gentle => "宽松辅助", _ => "标准挑战" }}";
+            if (_challenge.IsComplete)
+            {
+                CatchFish(now);
+            }
+            else if (_challenge.IsBroken)
+            {
+                _castState = CastState.Idle;
+                _challenge = null;
+                _reelHeld = false;
+                _tensionBar.Visibility = Visibility.Collapsed;
+                _castButton.Content = "抛竿";
+                _status.Text = "鱼线松开了，鱼儿游回池塘。想再试一次就抛竿。";
+                _renderer.Stage = FishingStage.Retracting;
+            }
         }
         _renderer.Tick(now);
+    }
+
+    private void SetAssistMode(FishingAssistMode mode)
+    {
+        if (_settings.FishingAssistMode == mode) return;
+        _settings.FishingAssistMode = mode;
+        SaveGameSettings();
+        if (_castState == CastState.Bite)
+            _status.Text = "辅助设置已保存，将在下一竿生效。";
+    }
+
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Space || _castState != CastState.Bite || e.IsRepeat) return;
+        _reelHeld = true;
+        e.Handled = true;
+    }
+
+    private void Window_PreviewKeyUp(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Space || _castState != CastState.Bite) return;
+        _reelHeld = false;
+        e.Handled = true;
     }
 
     private void RefreshFishCount()

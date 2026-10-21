@@ -36,7 +36,7 @@ public partial class App : Application
         {
             try
             {
-                MessageBox.Show(CyberBuddhaSeal.DescribeRunningBuild(), "赛博大佛 · 构建印记", MessageBoxButton.OK, MessageBoxImage.Information);
+                new CyberBuddhaStampWindow().ShowDialog();
             }
             catch (Exception ex)
             {
