@@ -29,7 +29,7 @@ The preview package is a self-contained Windows x64 build. The executable is cur
 
 ### Source-level “Cyber Buddha” mark
 
-Run `CodexPond.exe --cyber-buddha-stamp` to view the source mark ID, version, and SHA-256 fingerprint of the current executable. Compare it with the checksum manifest in the [official GitHub Releases](https://github.com/a2098127101-droid/codex-pond/releases). The currently published preview package does not include this option; it takes effect with a build that contains this change. The mark is not drawn in the pond. A locally displayed hash is not a digital signature and cannot prevent a binary from being modified.
+Run `CodexPond.exe --cyber-buddha-stamp` to view the source mark ID, version, and SHA-256 fingerprint of the current executable. Compare the fingerprint only with the checksum manifest for the matching version in the [official GitHub Releases](https://github.com/a2098127101-droid/codex-pond/releases); locally built binaries normally have different hashes from release binaries. The currently published preview package does not include this option; it takes effect with a build that contains this change. The mark is not drawn in the pond. A locally displayed hash is not a digital signature and cannot prevent a binary from being modified.
 
 ## Provider and Steam status
 

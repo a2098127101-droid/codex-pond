@@ -29,7 +29,7 @@
 
 ### 源码级“赛博大佛”印记
 
-运行 `CodexPond.exe --cyber-buddha-stamp` 可查看源码印记编号、版本和当前可执行文件的 SHA-256 指纹。请将其与[官方 GitHub Release 的校验清单](https://github.com/a2098127101-droid/codex-pond/releases)对照。当前公开预览包尚未包含此参数；该功能从包含本次改动的构建开始生效。印记不显示在池塘场景中；本地哈希本身不是数字签名，也不能阻止二进制文件被修改。
+运行 `CodexPond.exe --cyber-buddha-stamp` 可查看源码印记编号、版本和当前可执行文件的 SHA-256 指纹。仅将指纹与对应同版本的[官方 GitHub Release 校验清单](https://github.com/a2098127101-droid/codex-pond/releases)对照；本地源码构建与发行版哈希通常不同。当前公开预览包尚未包含此参数；该功能从包含本次改动的构建开始生效。印记不显示在池塘场景中；本地哈希本身不是数字签名，也不能阻止二进制文件被修改。
 
 ## Agent 与 Steam 状态
 

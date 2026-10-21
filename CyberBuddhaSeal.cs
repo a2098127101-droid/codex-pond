@@ -47,6 +47,6 @@ public static class CyberBuddhaSeal
         }
 
         var targetName = string.IsNullOrWhiteSpace(executablePath) ? "unknown" : Path.GetFileName(executablePath);
-        return $"{SourceMark}\n\n{MarkId}\nVersion: {version}\nFile: {targetName}\nSHA-256: {fingerprint}\n\n此指纹只用于与 Codex Pond 官方 GitHub Release 中的 SHA256SUMS.txt 对照；单独显示的哈希不是数字签名，也不能单独证明文件来源。";
+        return $"{SourceMark}\n\n{MarkId}\nVersion: {version}\nFile: {targetName}\nSHA-256: {fingerprint}\n\n仅将此指纹与对应同版本的 Codex Pond 官方 GitHub Release 校验清单对照；本地源码构建与发行版哈希通常不同。单独显示的哈希不是数字签名，也不能单独证明文件来源。";
     }
 }
