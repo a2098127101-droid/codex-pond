@@ -2,62 +2,61 @@
 
 [简体中文](README.md) · [English](README.en.md)
 
-**A small pixel-art pond that turns completed agent turns into fish for your collection.** Codex Pond is a Windows desktop companion with an independent fishing mode and optional local Agent connectors.
+**一方像素池塘，把完成的 Agent 任务回合变成鱼册中的收获。** Codex Pond 是一款面向 Windows 的桌面陪伴应用，支持独立钓鱼，也可选接入本机 Agent。
 
-[Download the Windows x64 portable preview](https://github.com/a2098127101-droid/codex-pond/releases/download/v0.1.0-preview.1/CodexPond-win-x64.zip) · [SHA-256 checksum](https://github.com/a2098127101-droid/codex-pond/releases/download/v0.1.0-preview.1/SHA256SUMS.txt) · [Source ZIP](https://github.com/a2098127101-droid/codex-pond/archive/refs/heads/main.zip) · [All releases](https://github.com/a2098127101-droid/codex-pond/releases)
+[下载 Windows x64 便携预览版](https://github.com/a2098127101-droid/codex-pond/releases/download/v0.1.0-preview.1/`CodexPond-win-x64.zip`) · [SHA-256 校验值](https://github.com/a2098127101-droid/codex-pond/releases/download/v0.1.0-preview.1/SHA256SUMS.txt) · [源码 ZIP](https://github.com/a2098127101-droid/codex-pond/archive/refs/heads/main.zip) · [全部发行版本](https://github.com/a2098127101-droid/codex-pond/releases)
 
-![Static preview of six original pond themes](docs/images/theme-preview.png)
+![六款原创池塘主题的静态预览](docs/images/theme-preview.png)
 
-> The image above is a static design preview. It is not a recording of runtime interaction or a desktop acceptance test.
+> 上图是静态设计预览，不是应用运行过程的录屏，也不能证明桌面交互验收已完成。
 
-## What it does
+## 功能简介
 
-- Keeps a compact, draggable pixel pond on the Windows desktop, with six original scene layouts, a fish book, seasonal palettes, local weather, and occasional events.
-- Provides an independent fishing mode that can be used without an Agent.
-- Connects to Codex App Server, DeepSeek Harness headless CLI, or Claude Code with a configured Work Buddy MCP gateway. Only a confirmed successful Agent turn earns one fish; failed, cancelled, disconnected, or uncertain turns do not.
-- Uses original fish and scene art. Seasonal ambience changes with local time and month. The app does not fetch weather data.
-- Can count anonymous keyboard/mouse activity pulses during an active Agent turn to affect fish rarity. It does not save input contents, coordinates, target applications, or per-input history; the option can be disabled.
-- Stores the fish book and settings locally. Steam cloud data, when configured by the user, is limited to game progress and settings; Agent prompts, conversations, working directories, logs, and credentials are excluded.
+- 在 Windows 桌面显示一方紧凑、可拖动的像素池塘，包含六种原创场景布局、鱼册、季节配色、本地天气和偶发环境事件。
+- 提供无需 Agent 即可游玩的独立钓鱼模式。
+- 支持连接 Codex App Server、DeepSeek Harness headless CLI，或通过已配置的 Work Buddy MCP 网关连接 Claude Code。只有确认成功完成的 Agent 回合才会钓起一条鱼；失败、取消、断线或结果不明确时不会记鱼。
+- 池塘场景和鱼类美术均为原创。季节氛围随本地时间和月份变化；应用不会获取联网天气数据。
+- Agent 回合进行期间，可选择统计匿名键鼠活动脉冲，以影响鱼类稀有度。应用不会保存输入内容、鼠标坐标、目标应用或逐次输入历史；此功能可以关闭。
+- 鱼册和设置保存在本地。用户配置 Steam 云存档后，云端数据范围仅限游戏进度和设置；不会上传 Agent 提示词、对话、工作目录、日志或凭据。
 
-## Download and run
+## 下载与运行
 
-1. Download `CodexPond-win-x64.zip` from the link above.
-2. Extract it and run `CodexPond.exe`.
-3. For Agent mode, install and sign in to the selected provider separately. Codex Pond does not bundle provider CLIs or credentials.
+1. 下载上方链接中的 `CodexPond-win-x64.zip`。
+2. 解压后运行 `CodexPond.exe`。
+3. 使用 Agent 模式时，请另行安装并登录对应的提供方。Codex Pond 不捆绑 Agent CLI 或凭据。
 
-The preview package is a self-contained Windows x64 build. The executable is currently unsigned, so Windows may display a publisher or SmartScreen warning. Review the source and the published SHA-256 checksum before running it.
+预览包是 Windows x64 自包含构建。目前的可执行文件尚未签名，Windows 可能显示发布者或 SmartScreen 警告。运行前请检查源码并核对已发布的 SHA-256 校验值。
 
-## Provider and Steam status
+## Agent 与 Steam 状态
 
-The Codex, DeepSeek Harness, and Work Buddy connector implementations are included. Automated smoke coverage uses fake CLI/App Server/MCP event streams. Real provider end-to-end acceptance is still pending: it requires the user's own CLI, sign-in, MCP setup, and approvals. No provider credentials are included.
+仓库包含 Codex、DeepSeek Harness 和 Work Buddy 连接器实现。自动化冒烟验证使用模拟 CLI、App Server 和 MCP 事件流。真实提供方的端到端验收仍待完成，需要用户自行配置 CLI、登录、MCP 和审批；仓库不包含提供方凭据。
 
-Steamworks.NET integration code and SteamPipe preparation scripts are included. Live Steam achievements and cloud saves have not been verified. A Steamworks redistributable (`steam_api64.dll`) and Steamworks App/Depot configuration are still required; this preview is not a Steam release.
+仓库包含 Steamworks.NET 集成代码和 SteamPipe 准备脚本。Steam 成就和云存档尚未经过真实 Steam 环境验证。仍需提供 Steamworks 可再发行文件（`steam_api64.dll`）并配置 Steam App/Depot；此预览版不是 Steam 商店发行版。
 
-Transparent-region click-through, multi-monitor DPI behavior, and hands-on desktop interaction have not been fully accepted on target hardware.
+透明区域鼠标穿透、多显示器 DPI 行为以及桌面实机交互尚未完成全面验收。
 
-## Build from source
+## 从源码构建
 
-Requirements: Windows 10/11 x64 and the .NET 8 SDK.
+构建要求：Windows 10/11 x64 和 .NET 8 SDK。
 
-```powershell
+~~~powershell
 dotnet restore .\CodexPond.sln -p:RestoreSources=https://api.nuget.org/v3/index.json -p:NuGetAudit=false
 dotnet build .\CodexPond.sln -c Release
-```
+~~~
 
-The smoke project is in `tests/CodexPond.Smoke`. Its fake provider tests do not prove real provider authentication or runtime compatibility.
+冒烟验证项目位于 [tests/CodexPond.Smoke](tests/CodexPond.Smoke)。模拟提供方测试不能证明真实提供方的登录流程或运行时兼容性。
 
-## Privacy and permissions
+## 隐私与权限
 
-- Provider CLIs use their own local sign-in, sandbox, and approval settings.
-- Codex Pond does not read credential files or auto-approve provider requests.
-- The activity option counts temporary anonymous pulses only while an Agent turn is active; it does not persist the count.
-- Local fish-book and settings files are stored under `%LOCALAPPDATA%\CodexPond`.
+- 各提供方 CLI 使用其自身的本地登录、沙箱和审批设置。
+- Codex Pond 不读取凭据文件，也不会自动批准提供方请求。
+- 活动统计只在 Agent 回合进行时临时累计匿名脉冲，不会持久化计数。
+- 鱼册和设置保存在 %LOCALAPPDATA%\CodexPond。
 
-## Project license
+## 项目许可证
 
-No license has been selected for the Codex Pond project yet. Third-party notices are in [`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt) and [`THIRD-PARTY-NOTICES-DOTNET.txt`](THIRD-PARTY-NOTICES-DOTNET.txt). Please review them separately.
+Codex Pond 项目尚未选定许可证。第三方声明见 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt) 和 [THIRD-PARTY-NOTICES-DOTNET.txt](THIRD-PARTY-NOTICES-DOTNET.txt)，请分别查阅。
 
-## Inspiration and attribution
+## 灵感与版权说明
 
-The calm seasonal mood is inspired by pixel-art life-simulation games, and the work-to-visible-reward loop takes inspiration from [喵了个菜！](https://store.steampowered.com/app/4201710?l=schinese). All Codex Pond scenes, interface elements, and fish sprites are original; no game art or interface assets are included.
-
+本项目的轻松季节氛围受到像素风生活模拟游戏启发，“工作转化为可见收获”的反馈逻辑参考了[《喵了个菜！》](https://store.steampowered.com/app/4201710?l=schinese)。Codex Pond 的场景、界面元素和鱼类精灵均为原创，不包含其他游戏的美术或界面素材。
