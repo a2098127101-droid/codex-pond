@@ -1,0 +1,7 @@
+- insert:
+    - id: codex-pond-approval-bridge
+      name: ./approval-bridge.mjs
+- update:
+    - id: approval
+      config:
+        policy: ask

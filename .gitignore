@@ -1,0 +1,33 @@
+# .NET and Visual Studio
+**/bin/
+**/obj/
+.vs/
+TestResults/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Generated Steam/portable build output
+/SteamPipe/staging/
+/SteamPipe/build-output/
+/SteamPipe/generated/
+/SteamPipe/release/
+/SteamPipe/app_build.vdf
+/SteamPipe/depot_build_windows.vdf
+/SteamPipe/logs/
+
+# Local audit and developer scratch output
+/DESIGN-IS-*/
+*.log
+*.tmp
+*.local.yaml
+*.secrets.json
+*.bak
+
+# Credentials and signing material
+*.pfx
+*.p12
+*.key
+.env
+.env.*

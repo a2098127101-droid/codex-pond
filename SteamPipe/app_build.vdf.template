@@ -1,0 +1,12 @@
+"AppBuild"
+{
+	"AppID"		"@APP_ID@"
+	"Desc"		"Codex Pond local Windows x64 build"
+	"BuildOutput"	"@BUILD_OUTPUT@"
+	"ContentRoot"	"@CONTENT_ROOT@"
+	"SetLive"		""
+	"Depots"
+	{
+		"@DEPOT_ID@"	"depot_build_windows.vdf"
+	}
+}

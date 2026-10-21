@@ -1,0 +1,145 @@
+<Window x:Class="CodexPond.TaskPanelWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="夜钓小屋"
+        Width="440" Height="580"
+        MinWidth="400" MinHeight="490"
+        WindowStyle="None"
+        ResizeMode="CanResizeWithGrip"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="True"
+        SnapsToDevicePixels="True">
+    <Window.Resources>
+        <Style x:Key="WoodButton" TargetType="Button">
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Background" Value="#314B3D"/>
+            <Setter Property="Foreground" Value="#F4DFAF"/>
+            <Setter Property="BorderBrush" Value="#AE7A42"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontFamily" Value="Microsoft YaHei UI"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#49664B"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.5"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="FontFamily" Value="Microsoft YaHei UI"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="#35271E"/>
+            <Setter Property="Background" Value="#F1DEB8"/>
+            <Setter Property="BorderBrush" Value="#987449"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="7,5"/>
+            <Setter Property="CaretBrush" Value="#4F3828"/>
+        </Style>
+    </Window.Resources>
+    <Grid Margin="5">
+        <Border Background="#211A18" BorderBrush="#805331" BorderThickness="2" Padding="3">
+            <Grid Background="#DDC191">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="50"/>
+                    <RowDefinition Height="38"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="104"/>
+                    <RowDefinition Height="43"/>
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" Background="#3B2922" MouseLeftButtonDown="Header_MouseLeftButtonDown">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="48"/>
+                        <ColumnDefinition Width="48"/>
+                        <ColumnDefinition Width="58"/>
+                        <ColumnDefinition Width="48"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="夜钓小屋" FontFamily="Microsoft YaHei UI" FontSize="16" FontWeight="Bold" Foreground="#F3D99E"/>
+                        <TextBlock Text="一轮工作，一次安静的收获" Margin="0,1,0,0" FontFamily="Microsoft YaHei UI" FontSize="9" Foreground="#C6A779"/>
+                    </StackPanel>
+                    <Button Grid.Column="1" Content="鱼册" Margin="0,11,3,11" Style="{StaticResource WoodButton}" Click="FishBookButton_Click"/>
+                    <Button Grid.Column="2" Content="外观" Margin="0,11,3,11" Style="{StaticResource WoodButton}" Click="AppearanceButton_Click"/>
+                    <Button Grid.Column="3" Content="独立" ToolTip="切换到独立钓鱼" Margin="0,11,3,11" Style="{StaticResource WoodButton}" Click="IndependentModeButton_Click"/>
+                    <Button Grid.Column="4" Content="收起" Margin="0,11,7,11" Style="{StaticResource WoodButton}" Click="HideButton_Click"/>
+                </Grid>
+
+                <Grid Grid.Row="1" Margin="9,5,9,3">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="94"/>
+                        <ColumnDefinition Width="58"/>
+                        <ColumnDefinition Width="58"/>
+                        <ColumnDefinition Width="58"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="WorkspacePathText" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="2,0,7,0" FontFamily="Microsoft YaHei UI" FontSize="9.5" Foreground="#58432E"/>
+                    <ComboBox x:Name="ProviderComboBox" Grid.Column="1" Margin="0,0,4,0" VerticalContentAlignment="Center" FontFamily="Microsoft YaHei UI" FontSize="9" SelectionChanged="ProviderComboBox_SelectionChanged" AutomationProperties.Name="选择 Agent 提供方"/>
+                    <Button x:Name="WorkspaceButton" Grid.Column="2" Content="目录" Margin="0,0,4,0" Style="{StaticResource WoodButton}" Click="WorkspaceButton_Click"/>
+                    <Button x:Name="WorkBuddyStatusButton" Grid.Column="3" Content="WB 状态" ToolTip="打开或设置 Work Buddy 状态页" Margin="0,0,4,0" Style="{StaticResource WoodButton}" Click="WorkBuddyStatusButton_Click" Visibility="Collapsed"/>
+                    <Button x:Name="NewThreadButton" Grid.Column="4" Content="新会话" Style="{StaticResource WoodButton}" Click="NewThreadButton_Click"/>
+                </Grid>
+
+                <ScrollViewer x:Name="MessagesScrollViewer" Grid.Row="2" Margin="9,4,9,6" VerticalScrollBarVisibility="Auto" Background="#CDB282" Padding="8">
+                    <ItemsControl ItemsSource="{Binding Messages}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border x:Name="MessageBorder" Background="Transparent" BorderThickness="0" Padding="7,5" Margin="0,0,0,4">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Speaker}" FontFamily="Microsoft YaHei UI" FontSize="9" FontWeight="Bold" Foreground="#40563E" Margin="0,0,0,2"/>
+                                        <TextBlock Text="{Binding Text}" FontFamily="Microsoft YaHei UI" FontSize="10.5" Foreground="#352C23" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding IsUser}" Value="True">
+                                        <Setter TargetName="MessageBorder" Property="Background" Value="#B8C297"/>
+                                        <Setter TargetName="MessageBorder" Property="Padding" Value="7,5"/>
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <Border x:Name="RequestCard" Grid.Row="3" Margin="9,0,9,6" Padding="8" Background="#D1AE72" BorderBrush="#8F6738" BorderThickness="1" Visibility="Collapsed">
+                    <StackPanel>
+                        <TextBlock x:Name="RequestTitleText" AutomationProperties.LiveSetting="Assertive" AutomationProperties.Name="Codex 待处理请求" FontFamily="Microsoft YaHei UI" FontWeight="Bold" FontSize="11" Foreground="#382B21" TextWrapping="Wrap"/>
+                        <TextBlock x:Name="RequestDetailsText" Margin="0,3,0,3" FontFamily="Microsoft YaHei UI" FontSize="9.5" Foreground="#47382A" TextWrapping="Wrap" MaxHeight="55"/>
+                        <StackPanel x:Name="RequestFieldsPanel"/>
+                        <TextBlock x:Name="RequestNoteText" Margin="0,3,0,0" FontFamily="Microsoft YaHei UI" FontSize="9" Foreground="#674927" TextWrapping="Wrap"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,5,0,0">
+                            <Button x:Name="RequestPrimaryButton" Content="允许一次" MinWidth="80" Margin="0,0,6,0" Style="{StaticResource WoodButton}" Click="RequestPrimaryButton_Click"/>
+                            <Button x:Name="RequestDeclineButton" Content="拒绝" MinWidth="60" Style="{StaticResource WoodButton}" Click="RequestDeclineButton_Click"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <Grid Grid.Row="4" Margin="9,0,9,7">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="21"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Text="给 Codex 留句话" FontFamily="Microsoft YaHei UI" FontSize="10" FontWeight="Bold" Foreground="#42513A" VerticalAlignment="Center"/>
+                    <TextBox x:Name="PromptTextBox" Grid.Row="1" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" FontSize="11" PreviewKeyDown="PromptTextBox_PreviewKeyDown"/>
+                </Grid>
+
+                <Grid Grid.Row="5" Margin="9,0,9,7">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="88"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="StatusText" Text="池塘已准备好" AutomationProperties.Name="任务状态" AutomationProperties.LiveSetting="Polite" FontFamily="Microsoft YaHei UI" FontSize="9" Foreground="#4C533E" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                    <Button x:Name="SubmitButton" Grid.Column="1" Content="抛竿开始" FontWeight="Bold" Style="{StaticResource WoodButton}" Click="SubmitButton_Click"/>
+                    <Button x:Name="CancelTurnButton" Grid.Column="1" Content="停止当前任务" Background="#773E2D" Foreground="#F5D9A7" AutomationProperties.Name="请求 Codex 停止当前任务" Style="{StaticResource WoodButton}" Click="CancelTurnButton_Click" Visibility="Collapsed"/>
+                </Grid>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
