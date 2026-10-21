@@ -45,7 +45,7 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "artifacts/macos/CodexPond-${{ matrix.rid }}.zip"
 
       - name: Upload unsigned development build
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: CodexPond-${{ matrix.rid }}
           path: artifacts/macos/CodexPond-${{ matrix.rid }}.zip
