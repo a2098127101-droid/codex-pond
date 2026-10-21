@@ -4,7 +4,7 @@
 
 **A small pixel-art pond that turns completed agent turns into fish for your collection.** Codex Pond is a Windows desktop companion with an independent fishing mode and optional local Agent connectors.
 
-[Download the Windows x64 portable preview](https://github.com/a2098127101-droid/codex-pond/releases/download/v0.1.0-preview.1/CodexPond-win-x64.zip) · [SHA-256 checksum](https://github.com/a2098127101-droid/codex-pond/releases/download/v0.1.0-preview.1/SHA256SUMS.txt) · [All releases](https://github.com/a2098127101-droid/codex-pond/releases)
+[Download the Windows x64 portable preview](https://github.com/a2098127101-droid/codex-pond/releases/download/v0.1.0-preview.1/CodexPond-win-x64.zip) · [SHA-256 checksum](https://github.com/a2098127101-droid/codex-pond/releases/download/v0.1.0-preview.1/SHA256SUMS.txt) · [Source ZIP](https://github.com/a2098127101-droid/codex-pond/archive/refs/heads/main.zip) · [All releases](https://github.com/a2098127101-droid/codex-pond/releases)
 
 ![Static preview of six original pond themes](docs/images/theme-preview.png)
 

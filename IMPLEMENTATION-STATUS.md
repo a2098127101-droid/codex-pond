@@ -31,3 +31,11 @@ This is an early portable preview, not a Steam-ready release. See the two README
 ## Third-party components
 
 Steamworks.NET is distributed under its MIT license. See [`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt). No project-wide license has been selected yet.
+
+## GitHub preview
+
+- Public source repository: https://github.com/a2098127101-droid/codex-pond
+- Preview release: https://github.com/a2098127101-droid/codex-pond/releases/tag/v0.1.0-preview.1
+- Portable Windows x64 asset: https://github.com/a2098127101-droid/codex-pond/releases/download/v0.1.0-preview.1/CodexPond-win-x64.zip
+- Archive size: 72,158,788 bytes. SHA-256: `38e60797be670351572483c31f1c482404e0f7dbb027ecefc1a54754cfbfcba6`.
+- GitHub release metadata reports the asset uploaded with the same SHA-256; anonymous HTTP HEAD to the direct asset URL returned 200. The source upload excludes build caches, local audit notes, and machine-specific paths. The portable archive excludes PDB files and `steam_api64.dll`.
